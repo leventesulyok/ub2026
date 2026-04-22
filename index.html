@@ -172,6 +172,7 @@ const WMO = {
   82:['⛈️','Erős záporok'], 95:['⛈️','Zivatar'], 99:['⛈️','Erős zivatar']
 };
 
+
 async function fetchWeather() {
   if (_weatherCache && Date.now() - _weatherLastFetch < 29*60*1000) return;
   const pts = [{lat:46.948,lon:17.873},{lat:46.762,lon:17.246},{lat:46.906,lon:18.049},{lat:46.849,lon:17.891}];
@@ -179,13 +180,16 @@ async function fetchWeather() {
   try {
     await Promise.all(pts.map(async pt => {
       const u = 'https://api.open-meteo.com/v1/forecast?latitude='+pt.lat+'&longitude='+pt.lon+
-                '&hourly=temperature_2m,weathercode&timezone=Europe%2FBudapest&start_date=2026-05-08&end_date=2026-05-09';
-      const d = await fetch(u).then(r => r.json());
+                '&hourly=temperature_2m,weathercode&timezone=Europe%2FBudapest&forecast_days=16';
+      const r = await fetch(u);
+      if (!r.ok) throw new Error('HTTP '+r.status);
+      const d = await r.json();
       cache[pt.lat.toFixed(2)] = d;
     }));
     _weatherCache = cache; _weatherLastFetch = Date.now();
-  } catch(e) { console.warn('Weather fetch error:', e); }
+  } catch(e) { console.warn('Weather fetch error (non-fatal):', e); }
 }
+
 
 function getWeather(lat, arrStr) {
   if (!_weatherCache || !arrStr) return null;
@@ -250,12 +254,29 @@ function applyUB25(rows) {
 function applyValtas(rows) {
   const V = {};
   for (let i=1; i<rows.length; i++) { const n=(rows[i][0]||'').trim(); if(n) V[n]=rows[i]; }
+
+  function normName(s) {
+    return s.toLowerCase().trim()
+      .replace(/kelet/g,'').replace(/nyugat/g,'').replace(/\bk\b\.?/g,'').replace(/\bny\b\.?/g,'')
+      .replace(/versenyközpont/g,'').replace(/kampusz/g,'')
+      .replace(/\s+/g,' ').trim().replace(/\.$/,'');
+  }
+  const Vnorm = {};
+  Object.keys(V).forEach(k => { Vnorm[normName(k)] = k; });
   function findV(name) {
     if (V[name]) return V[name];
-    const n6=name.trim().slice(0,8);
-    const k=Object.keys(V).find(k => k.slice(0,8)===n6 || name.includes(k.slice(0,5)));
-    return k ? V[k] : null;
+    const nn = normName(name);
+    // Exact normalized match
+    if (Vnorm[nn]) return V[Vnorm[nn]];
+    // Prefix match (min 8 chars) on normalized names
+    const keys = Object.keys(Vnorm);
+    const k = keys.find(nk => {
+      const minL = Math.min(nn.length, nk.length);
+      return minL >= 8 && nn.slice(0, minL) === nk.slice(0, minL);
+    });
+    return k ? V[Vnorm[k]] : null;
   }
+
   W.forEach(wp => {
     if (!wp.special) return;
     const row = findV(wp.name); if (!row) return;
