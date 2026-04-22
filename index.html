@@ -84,6 +84,13 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
   subdomains:'abcd',maxZoom:19
 }).addTo(map);
 
+function renderSegments(){
+  // Sync S runners from W departures
+  S.forEach((seg,si)=>{
+    const wp = W.find(w=>w.name===seg.from);
+    if(wp&&wp.departures&&wp.departures[0]) seg.runner=wp.departures[0].runner;
+  });
+  SLayer.clearLayers();
 const RG={};
 S.forEach(seg=>{
   const isNight=seg.phase==='night';
@@ -97,7 +104,7 @@ S.forEach(seg=>{
   base.addTo(map);
   if(isNight){
     const ov=L.polyline(seg.coords,{color:'#ffffff',weight:2.5,opacity:0.8,lineCap:'round',dashArray:'7 6'});
-    ov.addTo(map); RG[seg.runner].push(ov);
+    SLayer.addLayer(ov); RG[seg.runner].push(ov);
   }
 });
 
@@ -180,6 +187,7 @@ const RACE_DATE = '2026-04-25';
 
 // LayerGroup for W markers (clearable)
 const WLayer = L.layerGroup().addTo(map);
+const SLayer = L.layerGroup().addTo(map);
 
 // Weather cache: index -> {temp, icon, desc, phase}
 const WCACHE = {};
@@ -225,6 +233,13 @@ function timeToMin(t) {
   return parseInt(p[0])*60 + parseInt(p[1]);
 }
 
+// Format time string "H:MM:SS" or "HH:MM:SS" -> "HH:MM"
+function fmtTime(t) {
+  if(!t) return '';
+  const p = t.trim().split(':');
+  if(p.length < 2) return t;
+  return String(parseInt(p[0])).padStart(2,'0') + ':' + p[1].padStart(2,'0');
+}
 // minutes -> "HH:MM"
 function minToTime(m) {
   if(m===null||m===undefined) return '';
@@ -336,23 +351,18 @@ async function fetchSheets() {
     const valtasRows = parseCSV(csv2);
 
     // Build váltás lookup by name
-    const vKeys = valtasRows.length ? Object.keys(valtasRows[0]) : [];
-    function findVKey(exact, partial) {
-      return vKeys.find(k=>k===exact) || vKeys.find(k=>k.includes(partial)) || null;
-    }
     const V = {
-      pont:    findVKey('Váltópont', 'ltópont'),
-      ido:     findVKey('Váltás ideje', 'ltás ideje'),
-      indul:   findVKey('Indulás a szállásról', 'zállásról'),
-      futo1:   findVKey('Futó1', 'utó1'),
-      futo2:   findVKey('Futó2', 'utó2'),
-      valto1:  findVKey('Váltó1', 'ltó1'),
-      valto2:  findVKey('Váltó2', 'ltó2'),
-      sofor:   findVKey('Sofőr a váltópontra', 'of'),
-      kocsi1:  findVKey('Kocsi1 - váltó', 'ocsi1'),
-      kocsi2:  findVKey('Kocsi2 - maradó', 'ocsi2'),
+      pont:   'Váltópont',
+      ido:    'Váltás ideje',
+      indul:  'Indulás a szállásról',
+      futo1:  'Futó1',
+      futo2:  'Futó2',
+      valto1: 'Váltó1',
+      valto2: 'Váltó2',
+      sofor:  'Sofőr a váltópontra',
+      kocsi1: 'Kocsi1 - váltó',
+      kocsi2: 'Kocsi2 - maradó',
     };
-    console.log('[UB] valtas key mapping:', V);
     const valtasMap = {};
     valtasRows.forEach(row => {
       const nm = V.pont ? (row[V.pont]||'').trim() : '';
@@ -363,30 +373,23 @@ async function fetchSheets() {
     // kalk has 58 data rows after headers (F4 = first header)
     // CSV will have some empty leading rows - filter to rows with ÉRKEZÉS value
     console.log('[UB] kalkRows sample:', kalkRows.slice(0,3));
-    if(kalkRows.length > 0) console.log('[UB] kalk columns:', Object.keys(kalkRows[0]));
-    // Key finder: exact match first, then partial
-    function findKey(keys, exact, partial) {
-      return keys.find(k=>k===exact) || keys.find(k=>k.includes(partial)) || null;
-    }
-    const kKeys = kalkRows.length ? Object.keys(kalkRows[0]) : [];
     const K = {
-      hossz:  findKey(kKeys, 'SZAKASZ HOSSZA', 'HOSSZ'),
-      indul:  findKey(kKeys, 'INDULÁS', 'NDUL'),
-      erkez:  findKey(kKeys, 'ÉRKEZÉS', 'RKEZÉS') || kKeys.find(k=>k==='ÉRKEZÉS'),
-      nev:    findKey(kKeys, 'SZAKASZ NÉV', 'NÉV'),
-      futo:   findKey(kKeys, 'FUTÓ', 'FUT'),
-      tempo:  findKey(kKeys, 'TEMPÓ', 'TEMP'),
-      ido:    findKey(kKeys, 'FUTÁSIDŐ', 'IDŐ'),
-      valt:   findKey(kKeys, 'VÁLTÓPONTHOZ ÉRKEZÉS IDEJE', 'LTÓP')
+      hossz: 'SZAKASZ HOSSZA',
+      indul: 'INDULÁS',
+      erkez: 'ÉRKEZÉS',
+      nev:   'SZAKASZ NÉV',
+      futo:  'FUTÓ',
+      tempo: 'TEMPÓ',
+      ido:   'FUTÁSIDŐ',
+      valt:  'VÁLTÓPONTHOZ ÉRKEZÉS IDEJE'
     };
-    console.log('[UB] kalk key mapping:', K);
     const dataRows = kalkRows.filter(r => {
-      const erkezes = K.erkez ? r[K.erkez] : '';
-      const futo = K.futo ? r[K.futo] : '';
-      return (erkezes && erkezes.match(/\d{1,2}:\d{2}/)) || (futo && futo.trim().length > 0);
+      const erkezes = r[K.erkez] || '';
+      const futo = r[K.futo] || '';
+      return erkezes.match(/\d{1,2}:\d{2}/) || futo.trim().length > 0;
     });
     console.log('[UB] dataRows found:', dataRows.length);
-    if(dataRows.length > 0) console.log('[UB] first dataRow:', dataRows[0]);
+    if(dataRows.length > 0) console.log('[UB] first dataRow keys:', Object.keys(dataRows[0]));
     console.log('[UB] dataRows found:', dataRows.length);
 
     dataRows.forEach((row, segIdx) => {
@@ -394,7 +397,7 @@ async function fetchSheets() {
       if(idx >= W.length) return;
 
       // Update arrival time at destination W point
-      const arrTime = K.valt ? (row[K.valt]||'').substring(0,5) : '';
+      const arrTime = K.valt ? fmtTime(row[K.valt]||'') : '';
       if(arrTime && arrTime.match(/\d{1,2}:\d{2}/)) W[idx].arrival = arrTime;
 
       // Update runner
@@ -413,7 +416,7 @@ async function fetchSheets() {
       }
 
       // Update departure time
-      const depTime = K.indul ? (row[K.indul]||'').substring(0,5) : '';
+      const depTime = K.indul ? fmtTime(row[K.indul]||'') : '';
       if(depTime && segIdx === 0 && depTime.match(/\d{1,2}:\d{2}/)) W[0].arrival = depTime;
     });
 
@@ -422,7 +425,7 @@ async function fetchSheets() {
       const v = valtasMap[wp.name];
       if(!v) return;
       // Update relay times
-      const valtasIdo = V.ido ? (v[V.ido]||'').substring(0,5) : '';
+      const valtasIdo = V.ido ? fmtTime(v[V.ido]||'') : '';
       if(valtasIdo) {
         wp.arrival = valtasIdo;
         wp.relay_time = valtasIdo;
@@ -456,6 +459,7 @@ async function fetchSheets() {
 // ---- RE-RENDER W MARKERS ----
 function reRenderMarkers() {
   WLayer.clearLayers();
+  renderSegments();
   W.forEach((wp, i) => {
     // Inject weather from cache
     if(WCACHE[i]) {
@@ -498,6 +502,8 @@ Object.entries(C).forEach(([runner,color])=>{
   };
   ctrl.appendChild(b);
 });
+}
+renderSegments();
 </script>
 
 <div class="ub-version" id="ub-version">v–</div>
