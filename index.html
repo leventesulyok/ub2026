@@ -186,20 +186,32 @@ let _lastKalk = '', _lastValtas = '';
 
 // ---- CSV PARSER ----
 function parseCSV(text) {
-  const lines = text.trim().split('\n');
-  const headers = lines[0].split(',').map(h => h.trim().replace(/^"|"$/g,''));
-  return lines.slice(1).map(line => {
-    const vals = []; let cur='', inQ=false;
-    for(let c of line) {
+  const lines = text.trim().split('\n').map(l => l.replace(/\r$/,''));
+  // Find header row: first row that contains FUTÓ or Váltópont
+  let headerIdx = 0;
+  for(let i=0;i<lines.length;i++){
+    if(lines[i].includes('FUT') || lines[i].includes('ltpont')){
+      headerIdx=i; break;
+    }
+  }
+  const splitLine = line => {
+    const vals=[]; let cur='', inQ=false;
+    for(let c of line){
       if(c==='"') inQ=!inQ;
-      else if(c===',' && !inQ) { vals.push(cur.trim()); cur=''; }
+      else if(c===',' && !inQ){vals.push(cur.trim().replace(/^"|"$/g,''));cur='';}
       else cur+=c;
     }
-    vals.push(cur.trim());
+    vals.push(cur.trim().replace(/^"|"$/g,''));
+    return vals;
+  };
+  const headers = splitLine(lines[headerIdx]).map(h=>h.trim());
+  console.log('[UB] CSV headers found:', headers);
+  return lines.slice(headerIdx+1).map(line => {
+    const vals = splitLine(line);
     const row={};
-    headers.forEach((h,i) => row[h] = (vals[i]||'').replace(/^"|"$/g,''));
+    headers.forEach((h,i) => row[h] = vals[i]||'');
     return row;
-  });
+  }).filter(r => Object.values(r).some(v=>v!==''));
 }
 
 // ---- TIME UTILS ----
@@ -325,7 +337,12 @@ async function fetchSheets() {
     // Update W from kalk rows (skip header rows - find rows with ÉRKEZÉS data)
     // kalk has 58 data rows after headers (F4 = first header)
     // CSV will have some empty leading rows - filter to rows with ÉRKEZÉS value
-    const dataRows = kalkRows.filter(r => r['ÉRKEZÉS'] && r['ÉRKEZÉS'].match(/\d{2}:\d{2}/));
+    console.log('[UB] kalkRows sample:', kalkRows.slice(0,3));
+    const dataRows = kalkRows.filter(r => {
+      const erkezes = r['ÉRKEZÉS'] || r['\u00c9RKEZ\u00c9S'] || '';
+      return erkezes.match(/\d{1,2}:\d{2}/);
+    });
+    console.log('[UB] dataRows found:', dataRows.length);
 
     dataRows.forEach((row, segIdx) => {
       const idx = segIdx + 1; // W[0]=Rajt, W[1]=Aszófő etc. segIdx 0 = seg 1 end = W[1]
@@ -336,13 +353,18 @@ async function fetchSheets() {
       if(arrTime) W[idx].arrival = arrTime;
 
       // Update runner for this segment's departure from W[segIdx]
-      const runner = (row['FUTÓ']||'').trim();
-      if(runner && W[segIdx].departures && W[segIdx].departures.length > 0) {
-        W[segIdx].departures[0].runner = runner;
-      }
-      // Update arrival runner at W[idx]
-      if(runner && W[idx].arrivals && W[idx].arrivals.length > 0) {
-        W[idx].arrivals[0].runner = runner;
+      const runner = (row['FUT\u00d3']||row['FUTÓ']||'').trim();
+      if(runner) {
+        if(W[segIdx].departures && W[segIdx].departures.length > 0) {
+          W[segIdx].departures[0].runner = runner;
+        } else if(W[segIdx].departures) {
+          W[segIdx].departures.push({runner, to: W[idx].name, sponsor:''});
+        }
+        if(W[idx].arrivals && W[idx].arrivals.length > 0) {
+          W[idx].arrivals[0].runner = runner;
+        } else if(W[idx].arrivals) {
+          W[idx].arrivals.push({runner, from: W[segIdx].name, sponsor:'', time:''});
+        }
       }
 
       // Update departure time (INDULÁS) on W[segIdx]
