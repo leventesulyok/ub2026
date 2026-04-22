@@ -49,9 +49,6 @@ header p{font-size:10px;color:#9999cc}
 .pw-gmlink{color:#4db8ff;font-size:11px;margin-top:3px;cursor:pointer;text-decoration:underline}.pw-navlinks{display:flex;gap:8px;margin-top:6px;align-items:center}.pw-navbtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;transition:opacity .2s}.pw-navbtn:hover{opacity:0.8}
 #sun-legend{position:absolute;top:12px;left:50px;z-index:800;background:rgba(18,18,42,.9);border:1px solid #2a2a50;border-radius:8px;padding:7px 12px;font-size:11px;display:flex;gap:14px;align-items:center;pointer-events:none}
 .sun-item{display:flex;align-items:center;gap:6px}
-
-.ub-version{position:fixed;bottom:8px;right:8px;font-size:10px;color:rgba(255,255,255,0.35);
-font-family:monospace;z-index:9999;pointer-events:none;letter-spacing:.03em;}
 </style>
 </head>
 <body>
@@ -84,13 +81,6 @@ L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r
   subdomains:'abcd',maxZoom:19
 }).addTo(map);
 
-function renderSegments(){
-  // Sync S runners from W departures
-  S.forEach((seg,si)=>{
-    const wp = W.find(w=>w.name===seg.from);
-    if(wp&&wp.departures&&wp.departures[0]) seg.runner=wp.departures[0].runner;
-  });
-  SLayer.clearLayers();
 const RG={};
 S.forEach(seg=>{
   const isNight=seg.phase==='night';
@@ -104,7 +94,7 @@ S.forEach(seg=>{
   base.addTo(map);
   if(isNight){
     const ov=L.polyline(seg.coords,{color:'#ffffff',weight:2.5,opacity:0.8,lineCap:'round',dashArray:'7 6'});
-    SLayer.addLayer(ov); RG[seg.runner].push(ov);
+    ov.addTo(map); RG[seg.runner].push(ov);
   }
 });
 
@@ -127,7 +117,7 @@ function chip(name){
   return `<span class="pw-runner-chip" style="color:${col};border:1px solid ${col}40"><span class="pw-dot" style="background:${col}"></span>${name}</span>`;
 }
 
-function renderWMarker(wp,i){
+W.forEach((wp,i)=>{
 
   const gm='https://www.google.com/maps?q='+wp.lat+','+wp.lon;
   const isNight=wp.light==='night';
@@ -152,7 +142,7 @@ function renderWMarker(wp,i){
   }
   const icon=L.divIcon({html:iconHtml,iconSize:size,iconAnchor:anchor,className:''});
   const marker=L.marker([wp.lat,wp.lon],{icon,zIndexOffset:isFinish?300:(isSpecial?200:(isWhite?100:0))});
-  const arrBadge=wp.arrival?`<span class="pw-arrival">&#x23F0; ${fmtTime(wp.arrival)}</span>`:'';
+  const arrBadge=wp.arrival?`<span class="pw-arrival">&#x23F0; ${wp.arrival}</span>`:'';
   const nightTag=isNight?' &#x1F319;':' &#x2600;&#xFE0F;';
   let html=`<div class="pw-title"><span>${wp.name}${nightTag}</span>${arrBadge}</div>`;
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C</div><div class="pw-weather-desc">${w.desc}</div></div></div>`;}
@@ -173,317 +163,9 @@ function renderWMarker(wp,i){
   if(deps.length){html+='<div class="pw-section-label">&#x2191; Induló szakasz</div>';deps.forEach(d=>{const col=C[d.runner]||'#aaa';const sp=d.sponsor?`<div class="pw-seg-sponsor">&#x1F4CB; ${d.sponsor}</div>`:'';html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body"><div class="pw-seg-runner" style="color:${col}">&#x1F3C3; ${d.runner}</div><div class="pw-seg-route">${wp.name} &#x2192; ${d.to}</div>${sp}</div>${AT[i]&&AT[i].d?`<div class="pw-seg-atbtn" onclick="window.open('${AT[i].d}','_blank')" title="AllTrails útvonal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18"><circle cx="50" cy="50" r="50" fill="#3D7A3D"/><polygon points="50,15 20,75 80,75" fill="white"/><polygon points="72,40 52,75 92,75" fill="white" opacity="0.7"/></svg></div>`:''}</div>`;});}
   html+=`<div class="pw-coord">${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</div><div class="pw-navlinks"><div class="pw-navbtn" title="Megnyitás Google Mapsben" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="24" height="24" style="object-fit:contain;border-radius:4px"></div><div class="pw-navbtn" title="Megnyitás Waze-ben" onclick="window.open('https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="24" height="24" style="object-fit:contain;border-radius:4px"></div></div>`; 
   marker.bindPopup(html,{maxWidth:380});
-  marker.bindTooltip(wp.arrival?`${wp.name} · ${fmtTime(wp.arrival)}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
-  WLayer.addLayer(marker);
-
-}
-
-// ============================================================
-// DYNAMIC DATA LAYER
-// ============================================================
-const SHEETS_KALK = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-AHvRK-jE8ecZK8u6hoarh9vJLhFCkghR9We8M4rsaVgN8_BgeENW0YzfgaBBPA/pub?gid=1064917461&single=true&output=csv';
-const SHEETS_VALTAS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-AHvRK-jE8ecZK8u6hoarh9vJLhFCkghR9We8M4rsaVgN8_BgeENW0YzfgaBBPA/pub?gid=1784165817&single=true&output=csv';
-const RACE_DATE = '2026-04-25';
-
-// LayerGroup for W markers (clearable)
-const WLayer = L.layerGroup().addTo(map);
-const SLayer = L.layerGroup().addTo(map);
-
-// Weather cache: index -> {temp, icon, desc, phase}
-const WCACHE = {};
-
-// Last seen data hashes for change detection
-let _lastKalk = '', _lastValtas = '', _refreshCount = 0;
-
-// ---- CSV PARSER ----
-function parseCSV(text) {
-  const lines = text.trim().split('\n').map(l => l.replace(/\r$/,''));
-  // Find header row: first row that contains FUTÓ or Váltópont
-  let headerIdx = 0;
-  for(let i=0;i<lines.length;i++){
-    if(lines[i].includes('FUT') || lines[i].includes('ltpont')){
-      headerIdx=i; break;
-    }
-  }
-  const splitLine = line => {
-    const vals=[]; let cur='', inQ=false;
-    for(let c of line){
-      if(c==='"') inQ=!inQ;
-      else if(c===',' && !inQ){vals.push(cur.trim().replace(/^"|"$/g,''));cur='';}
-      else cur+=c;
-    }
-    vals.push(cur.trim().replace(/^"|"$/g,''));
-    return vals;
-  };
-  const headers = splitLine(lines[headerIdx]).map(h=>h.trim());
-  console.log('[UB] CSV headers found:', headers);
-  return lines.slice(headerIdx+1).map(line => {
-    const vals = splitLine(line);
-    const row={};
-    headers.forEach((h,i) => row[h] = vals[i]||'');
-    return row;
-  }).filter(r => Object.values(r).some(v=>v!==''));
-}
-
-// ---- TIME UTILS ----
-// "02:05:00" -> minutes since midnight
-function timeToMin(t) {
-  if(!t) return null;
-  const p = t.split(':');
-  return parseInt(p[0])*60 + parseInt(p[1]);
-}
-
-// Format time string "H:MM:SS" or "HH:MM:SS" -> "HH:MM"
-function fmtTime(t) {
-  if(!t) return '';
-  const p = t.trim().split(':');
-  if(p.length < 2) return t;
-  return String(parseInt(p[0])).padStart(2,'0') + ':' + p[1].padStart(2,'0');
-}
-// minutes -> "HH:MM"
-function minToTime(m) {
-  if(m===null||m===undefined) return '';
-  const h = Math.floor(((m%1440)+1440)%1440/60);
-  const mn = ((m%1440)+1440)%1440%60;
-  return String(h).padStart(2,'0')+':'+String(mn).padStart(2,'0');
-}
-
-// race start minutes since midnight
-const RACE_START_MIN = 125; // 02:05
-
-// arrival time string -> Date ISO for Open-Meteo
-function arrivalToISO(timeStr) {
-  if(!timeStr) return null;
-  const min = timeToMin(timeStr.substring(0,5));
-  if(min===null) return null;
-  // if min < RACE_START_MIN, it's next day
-  const d = new Date(RACE_DATE + 'T00:00:00');
-  if(min < RACE_START_MIN - 30) d.setDate(d.getDate()+1);
-  d.setHours(Math.floor(min/60), min%60, 0, 0);
-  return d.toISOString().substring(0,16); // "2026-04-25T02:05"
-}
-
-// ---- WEATHER WMO CODE -> emoji ----
-function wmoToIcon(code, isNight) {
-  if(code<=1) return isNight?'🌙':'☀️';
-  if(code<=3) return isNight?'🌙':'⛅';
-  if(code<=49) return '🌫️';
-  if(code<=67) return '🌧️';
-  if(code<=77) return '❄️';
-  if(code<=82) return '🌦️';
-  if(code<=86) return '❄️';
-  if(code<=99) return '⛈️';
-  return '🌡️';
-}
-function wmoToDesc(code) {
-  if(code===0) return 'Tiszta égbolt';
-  if(code===1) return 'Majdnem tiszta';
-  if(code===2) return 'Részben felhős';
-  if(code===3) return 'Borult';
-  if(code<=49) return 'Köd';
-  if(code<=55) return 'Szitálás';
-  if(code<=67) return 'Eső';
-  if(code<=77) return 'Havazás';
-  if(code<=82) return 'Zápor';
-  if(code<=86) return 'Hózápor';
-  if(code<=99) return 'Zivatar';
-  return '';
-}
-
-// ---- FETCH WEATHER (Open-Meteo) ----
-// Batch: for each W point with known arrival time, fetch hourly forecast
-async function fetchWeatherForPoint(idx, wp, arrivalISO) {
-  try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${wp.lat}&longitude=${wp.lon}&hourly=temperature_2m,weathercode&timezone=Europe%2FBudapest&start_date=2026-04-25&end_date=2026-04-27`;
-    const r = await fetch(url);
-    const d = await r.json();
-    // Find closest hour to arrival
-    const times = d.hourly.time;
-    const targetHour = arrivalISO.substring(0,13); // "2026-04-25T02"
-    let best = 0;
-    for(let j=0;j<times.length;j++) {
-      if(times[j].startsWith(targetHour)) { best=j; break; }
-      if(times[j] <= arrivalISO) best=j;
-    }
-    const temp = Math.round(d.hourly.temperature_2m[best]);
-    const code = d.hourly.weathercode[best];
-    const hour = parseInt(arrivalISO.substring(11,13));
-    const isNight = hour < 6 || hour >= 21;
-    WCACHE[idx] = {
-      temp, code,
-      icon: wmoToIcon(code, isNight),
-      desc: wmoToDesc(code),
-      phase: isNight ? 'night' : 'day'
-    };
-  } catch(e) { console.warn('Weather fetch failed for W'+idx, e); }
-}
-
-async function fetchAllWeather() {
-  // Stagger requests 200ms apart to avoid 429 rate limit
-  for(let i=0; i<W.length; i++) {
-    const wp = W[i];
-    const arrival = wp.arrival || (i===0 ? '02:05' : null);
-    const iso = arrivalToISO(arrival);
-    if(!iso) continue;
-    await fetchWeatherForPoint(i, wp, iso);
-    await new Promise(r => setTimeout(r, 200));
-  }
-  reRenderMarkers();
-}
-
-// ---- FETCH SHEETS ----
-async function fetchSheets() {
-  try {
-    const t = Date.now();
-    const [r1, r2] = await Promise.all([
-      fetch(SHEETS_KALK + '&t=' + t, {cache:'no-store'}),
-      fetch(SHEETS_VALTAS + '&t=' + t, {cache:'no-store'})
-    ]);
-    if(!r1.ok) { console.error('[UB] Kalk fetch error:', r1.status, r1.statusText); const ve=document.getElementById('ub-version'); if(ve) ve.textContent='⚠️ Sheets hiba '+r1.status; return; }
-    if(!r2.ok) { console.error('[UB] Valtas fetch error:', r2.status, r2.statusText); const ve2=document.getElementById('ub-version'); if(ve2) ve2.textContent='⚠️ Sheets hiba '+r2.status; return; }
-    const [csv1, csv2] = await Promise.all([r1.text(), r2.text()]);
-    console.log('[UB] csv1 first 200:', csv1.substring(0,200));
-    console.log('[UB] csv2 first 200:', csv2.substring(0,200));
-
-    // Change detection
-    if(csv1 === _lastKalk && csv2 === _lastValtas) { console.log('[UB] No change in sheets'); return; }
-    _lastKalk = csv1; _lastValtas = csv2;
-
-    const kalkRows = parseCSV(csv1);
-    const valtasRows = parseCSV(csv2);
-
-    // Build váltás lookup by name
-    const V = {
-      pont:   'Váltópont',
-      ido:    'Váltás ideje',
-      indul:  'Indulás a szállásról',
-      futo1:  'Futó1',
-      futo2:  'Futó2',
-      valto1: 'Váltó1',
-      valto2: 'Váltó2',
-      sofor:  'Sofőr a váltópontra',
-      kocsi1: 'Kocsi1 - váltó',
-      kocsi2: 'Kocsi2 - maradó',
-    };
-    const valtasMap = {};
-    valtasRows.forEach(row => {
-      const nm = V.pont ? (row[V.pont]||'').trim() : '';
-      if(nm) valtasMap[nm] = row;
-    });
-
-    // Update W from kalk rows (skip header rows - find rows with ÉRKEZÉS data)
-    // kalk has 58 data rows after headers (F4 = first header)
-    // CSV will have some empty leading rows - filter to rows with ÉRKEZÉS value
-    console.log('[UB] kalkRows sample:', kalkRows.slice(0,3));
-    const K = {
-      hossz: 'SZAKASZ HOSSZA',
-      indul: 'INDULÁS',
-      erkez: 'ÉRKEZÉS',
-      nev:   'SZAKASZ NÉV',
-      futo:  'FUTÓ',
-      tempo: 'TEMPÓ',
-      ido:   'FUTÁSIDŐ',
-      valt:  'VÁLTÓPONTHOZ ÉRKEZÉS IDEJE'
-    };
-    const dataRows = kalkRows.filter(r => {
-      const erkezes = r[K.erkez] || '';
-      const futo = r[K.futo] || '';
-      return erkezes.match(/\d{1,2}:\d{2}/) && futo.trim().length > 0;
-    });
-    console.log('[UB] dataRows found:', dataRows.length);
-    if(dataRows.length > 0) console.log('[UB] first dataRow keys:', Object.keys(dataRows[0]));
-    console.log('[UB] dataRows found:', dataRows.length);
-
-    dataRows.forEach((row, segIdx) => {
-      const idx = segIdx + 1; // W[0]=Rajt, W[1]=Aszófő etc. segIdx 0 = seg 1 end = W[1]
-      if(idx >= W.length) return;
-
-      // Update arrival time at destination W point
-      const arrTime = K.valt ? fmtTime(row[K.valt]||'') : '';
-      if(arrTime && arrTime.match(/\d{1,2}:\d{2}/)) W[idx].arrival = arrTime;
-
-      // Update runner
-      const runner = K.futo ? (row[K.futo]||'').trim() : '';
-      if(runner) {
-        if(W[segIdx].departures && W[segIdx].departures.length > 0) {
-          W[segIdx].departures[0].runner = runner;
-        } else if(W[segIdx].departures) {
-          W[segIdx].departures.push({runner, to: W[idx].name, sponsor:''});
-        }
-        if(W[idx].arrivals && W[idx].arrivals.length > 0) {
-          W[idx].arrivals[0].runner = runner;
-        } else if(W[idx].arrivals) {
-          W[idx].arrivals.push({runner, from: W[segIdx].name, sponsor:'', time:''});
-        }
-      }
-
-      // Update departure time
-      const depTime = K.indul ? fmtTime(row[K.indul]||'') : '';
-      if(depTime && segIdx === 0 && depTime.match(/\d{1,2}:\d{2}/)) W[0].arrival = depTime;
-    });
-
-    // Update W from váltás map (relay points)
-    W.forEach((wp, i) => {
-      const v = valtasMap[wp.name];
-      if(!v) return;
-      // Update relay times
-      const valtasIdo = V.ido ? fmtTime(v[V.ido]||'') : '';
-      if(valtasIdo) {
-        wp.arrival = valtasIdo;
-        wp.relay_time = valtasIdo;
-      }
-      const f1 = V.futo1 ? (v[V.futo1]||'').trim() : '';
-      const f2 = V.futo2 ? (v[V.futo2]||'').trim() : '';
-      const v1 = V.valto1 ? (v[V.valto1]||'').trim() : '';
-      const v2 = V.valto2 ? (v[V.valto2]||'').trim() : '';
-      if(wp.relay) {
-        if(f1||f2) wp.relay.futak = [f1||'-', f2||'-'];
-        if(v1||v2) wp.relay.valtak = [v1||'-', v2||'-'];
-      }
-      const sofor = V.sofor ? (v[V.sofor]||'').trim() : '';
-      const kocsi1 = V.kocsi1 ? (v[V.kocsi1]||'').trim() : '';
-      const kocsi2 = V.kocsi2 ? (v[V.kocsi2]||'').trim() : '';
-      const indulas = V.indul ? (v[V.indul]||'').trim() : '';
-      if(sofor) wp.sofor = sofor;
-      if(kocsi1) wp.kocsi = kocsi1;
-      if(kocsi2) wp.kocsi2 = kocsi2;
-      if(indulas) wp.indulas_szallasrol = indulas;
-    });
-
-    reRenderMarkers();
-    _refreshCount++;
-    const now=new Date();
-    const vStr='v1.'+String(_refreshCount).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
-    const velEl=document.getElementById('ub-version');
-    if(velEl) velEl.textContent=vStr;
-  } catch(e) { console.error('Sheets fetch error:', e); }
-}
-
-// ---- RE-RENDER W MARKERS ----
-function reRenderMarkers() {
-  WLayer.clearLayers();
-  renderSegments();
-  W.forEach((wp, i) => {
-    // Inject weather from cache
-    if(WCACHE[i]) {
-      wp.weather = WCACHE[i];
-      wp.light = WCACHE[i].phase;
-    }
-    renderWMarker(wp, i);
-  });
-}
-
-// ---- INIT + INTERVALS ----
-async function init() {
-  reRenderMarkers();       // initial render with static data
-  await fetchSheets();     // load sheets data
-  await fetchAllWeather(); // load weather forecasts
-  setInterval(fetchSheets, 1 * 60 * 1000);        // every 1 min
-  setInterval(fetchAllWeather, 30 * 60 * 1000);   // every 30 min
-}
-
-init();
-;
+  marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
+  marker.addTo(map);
+});
 
 ACC.forEach(acc=>{
   const icon=L.divIcon({html:'<div style="font-size:24px;line-height:1;filter:drop-shadow(0 2px 5px rgba(0,0,0,.9))">&#x1F3E0;</div>',iconSize:[24,24],iconAnchor:[12,24],className:''});
@@ -505,10 +187,6 @@ Object.entries(C).forEach(([runner,color])=>{
   };
   ctrl.appendChild(b);
 });
-}
-renderSegments();
 </script>
-
-<div class="ub-version" id="ub-version">v–</div>
 </body>
 </html>
