@@ -49,6 +49,9 @@ header p{font-size:10px;color:#9999cc}
 .pw-gmlink{color:#4db8ff;font-size:11px;margin-top:3px;cursor:pointer;text-decoration:underline}.pw-navlinks{display:flex;gap:8px;margin-top:6px;align-items:center}.pw-navbtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;transition:opacity .2s}.pw-navbtn:hover{opacity:0.8}
 #sun-legend{position:absolute;top:12px;left:50px;z-index:800;background:rgba(18,18,42,.9);border:1px solid #2a2a50;border-radius:8px;padding:7px 12px;font-size:11px;display:flex;gap:14px;align-items:center;pointer-events:none}
 .sun-item{display:flex;align-items:center;gap:6px}
+
+.ub-version{position:fixed;bottom:8px;right:8px;font-size:10px;color:rgba(255,255,255,0.35);
+font-family:monospace;z-index:9999;pointer-events:none;letter-spacing:.03em;}
 </style>
 </head>
 <body>
@@ -276,7 +279,7 @@ function wmoToDesc(code) {
 // Batch: for each W point with known arrival time, fetch hourly forecast
 async function fetchWeatherForPoint(idx, wp, arrivalISO) {
   try {
-    const url = `https://api.open-meteo.com/v1/forecast?latitude=${wp.lat}&longitude=${wp.lon}&hourly=temperature_2m,weathercode&timezone=Europe%2FBudapest&start_date=${RACE_DATE}&end_date=2026-04-27&forecast_days=3`;
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${wp.lat}&longitude=${wp.lon}&hourly=temperature_2m,weathercode&timezone=Europe%2FBudapest&start_date=2026-04-25&end_date=2026-04-27`;
     const r = await fetch(url);
     const d = await r.json();
     // Find closest hour to arrival
@@ -314,14 +317,20 @@ async function fetchAllWeather() {
 // ---- FETCH SHEETS ----
 async function fetchSheets() {
   try {
+    const vel = document.getElementById('ub-version');
+    const t = Date.now();
     const [r1, r2] = await Promise.all([
-      fetch(SHEETS_KALK + '&t=' + Date.now()),
-      fetch(SHEETS_VALTAS + '&t=' + Date.now())
+      fetch(SHEETS_KALK + '&t=' + t, {cache:'no-store'}),
+      fetch(SHEETS_VALTAS + '&t=' + t, {cache:'no-store'})
     ]);
+    if(!r1.ok) { console.error('[UB] Kalk fetch error:', r1.status, r1.statusText); if(vel) vel.textContent='⚠️ Sheets hiba '+r1.status; return; }
+    if(!r2.ok) { console.error('[UB] Valtas fetch error:', r2.status, r2.statusText); if(vel) vel.textContent='⚠️ Sheets hiba '+r2.status; return; }
     const [csv1, csv2] = await Promise.all([r1.text(), r2.text()]);
+    console.log('[UB] csv1 first 200:', csv1.substring(0,200));
+    console.log('[UB] csv2 first 200:', csv2.substring(0,200));
 
     // Change detection
-    if(csv1 === _lastKalk && csv2 === _lastValtas) return;
+    if(csv1 === _lastKalk && csv2 === _lastValtas) { console.log('[UB] No change in sheets'); return; }
     _lastKalk = csv1; _lastValtas = csv2;
 
     const kalkRows = parseCSV(csv1);
@@ -403,6 +412,10 @@ async function fetchSheets() {
     });
 
     reRenderMarkers();
+    const now=new Date();
+    const vStr='v'+String(now.getDate()).padStart(2,'0')+'.'+String(now.getMonth()+1).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+    const vel=document.getElementById('ub-version');
+    if(vel) vel.textContent=vStr;
   } catch(e) { console.error('Sheets fetch error:', e); }
 }
 
@@ -452,5 +465,7 @@ Object.entries(C).forEach(([runner,color])=>{
   ctrl.appendChild(b);
 });
 </script>
+
+<div class="ub-version" id="ub-version">v–</div>
 </body>
 </html>
