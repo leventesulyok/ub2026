@@ -152,7 +152,7 @@ function renderWMarker(wp,i){
   }
   const icon=L.divIcon({html:iconHtml,iconSize:size,iconAnchor:anchor,className:''});
   const marker=L.marker([wp.lat,wp.lon],{icon,zIndexOffset:isFinish?300:(isSpecial?200:(isWhite?100:0))});
-  const arrBadge=wp.arrival?`<span class="pw-arrival">&#x23F0; ${wp.arrival}</span>`:'';
+  const arrBadge=wp.arrival?`<span class="pw-arrival">&#x23F0; ${fmtTime(wp.arrival)}</span>`:'';
   const nightTag=isNight?' &#x1F319;':' &#x2600;&#xFE0F;';
   let html=`<div class="pw-title"><span>${wp.name}${nightTag}</span>${arrBadge}</div>`;
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C</div><div class="pw-weather-desc">${w.desc}</div></div></div>`;}
@@ -173,7 +173,7 @@ function renderWMarker(wp,i){
   if(deps.length){html+='<div class="pw-section-label">&#x2191; Induló szakasz</div>';deps.forEach(d=>{const col=C[d.runner]||'#aaa';const sp=d.sponsor?`<div class="pw-seg-sponsor">&#x1F4CB; ${d.sponsor}</div>`:'';html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body"><div class="pw-seg-runner" style="color:${col}">&#x1F3C3; ${d.runner}</div><div class="pw-seg-route">${wp.name} &#x2192; ${d.to}</div>${sp}</div>${AT[i]&&AT[i].d?`<div class="pw-seg-atbtn" onclick="window.open('${AT[i].d}','_blank')" title="AllTrails útvonal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18"><circle cx="50" cy="50" r="50" fill="#3D7A3D"/><polygon points="50,15 20,75 80,75" fill="white"/><polygon points="72,40 52,75 92,75" fill="white" opacity="0.7"/></svg></div>`:''}</div>`;});}
   html+=`<div class="pw-coord">${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</div><div class="pw-navlinks"><div class="pw-navbtn" title="Megnyitás Google Mapsben" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="24" height="24" style="object-fit:contain;border-radius:4px"></div><div class="pw-navbtn" title="Megnyitás Waze-ben" onclick="window.open('https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="24" height="24" style="object-fit:contain;border-radius:4px"></div></div>`; 
   marker.bindPopup(html,{maxWidth:380});
-  marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
+  marker.bindTooltip(wp.arrival?`${wp.name} · ${fmtTime(wp.arrival)}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
   WLayer.addLayer(marker);
 
 }
@@ -193,7 +193,7 @@ const SLayer = L.layerGroup().addTo(map);
 const WCACHE = {};
 
 // Last seen data hashes for change detection
-let _lastKalk = '', _lastValtas = '';
+let _lastKalk = '', _lastValtas = '', _refreshCount = 0;
 
 // ---- CSV PARSER ----
 function parseCSV(text) {
@@ -319,13 +319,15 @@ async function fetchWeatherForPoint(idx, wp, arrivalISO) {
 }
 
 async function fetchAllWeather() {
-  const promises = W.map((wp,i) => {
+  // Stagger requests 200ms apart to avoid 429 rate limit
+  for(let i=0; i<W.length; i++) {
+    const wp = W[i];
     const arrival = wp.arrival || (i===0 ? '02:05' : null);
     const iso = arrivalToISO(arrival);
-    if(!iso) return Promise.resolve();
-    return fetchWeatherForPoint(i, wp, iso);
-  });
-  await Promise.all(promises);
+    if(!iso) continue;
+    await fetchWeatherForPoint(i, wp, iso);
+    await new Promise(r => setTimeout(r, 200));
+  }
   reRenderMarkers();
 }
 
@@ -386,7 +388,7 @@ async function fetchSheets() {
     const dataRows = kalkRows.filter(r => {
       const erkezes = r[K.erkez] || '';
       const futo = r[K.futo] || '';
-      return erkezes.match(/\d{1,2}:\d{2}/) || futo.trim().length > 0;
+      return erkezes.match(/\d{1,2}:\d{2}/) && futo.trim().length > 0;
     });
     console.log('[UB] dataRows found:', dataRows.length);
     if(dataRows.length > 0) console.log('[UB] first dataRow keys:', Object.keys(dataRows[0]));
@@ -449,8 +451,9 @@ async function fetchSheets() {
     });
 
     reRenderMarkers();
+    _refreshCount++;
     const now=new Date();
-    const vStr='v'+String(now.getDate()).padStart(2,'0')+'.'+String(now.getMonth()+1).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
+    const vStr='v1.'+String(_refreshCount).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
     const velEl=document.getElementById('ub-version');
     if(velEl) velEl.textContent=vStr;
   } catch(e) { console.error('Sheets fetch error:', e); }
