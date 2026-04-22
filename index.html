@@ -414,8 +414,8 @@ async function fetchSheets() {
     reRenderMarkers();
     const now=new Date();
     const vStr='v'+String(now.getDate()).padStart(2,'0')+'.'+String(now.getMonth()+1).padStart(2,'0')+' '+String(now.getHours()).padStart(2,'0')+':'+String(now.getMinutes()).padStart(2,'0')+':'+String(now.getSeconds()).padStart(2,'0');
-    const vel=document.getElementById('ub-version');
-    if(vel) vel.textContent=vStr;
+    const velEl=document.getElementById('ub-version');
+    if(velEl) velEl.textContent=vStr;
   } catch(e) { console.error('Sheets fetch error:', e); }
 }
 
