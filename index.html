@@ -46,7 +46,7 @@ header p{font-size:10px;color:#9999cc}
 .pw-seg-sponsor{font-size:10px;font-style:italic;color:#ffcc66;margin-top:1px}
 .pw-section-label{font-size:9px;text-transform:uppercase;letter-spacing:.06em;color:#7777aa;margin-top:6px;margin-bottom:2px}
 .pw-coord{color:#555577;font-size:10px;margin-top:6px}
-.pw-gmlink{color:#4db8ff;font-size:11px;margin-top:3px;cursor:pointer;text-decoration:underline}
+.pw-gmlink{color:#4db8ff;font-size:11px;margin-top:3px;cursor:pointer;text-decoration:underline}.pw-navlinks{display:flex;gap:8px;margin-top:6px;align-items:center}.pw-navbtn{display:inline-flex;align-items:center;justify-content:center;width:32px;height:32px;border-radius:8px;cursor:pointer;transition:opacity .2s}.pw-navbtn:hover{opacity:0.8}
 #sun-legend{position:absolute;top:12px;left:50px;z-index:800;background:rgba(18,18,42,.9);border:1px solid #2a2a50;border-radius:8px;padding:7px 12px;font-size:11px;display:flex;gap:14px;align-items:center;pointer-events:none}
 .sun-item{display:flex;align-items:center;gap:6px}
 </style>
@@ -159,7 +159,7 @@ W.forEach(wp=>{
   if(arrs.length){html+='<div class="pw-section-label">&#x2193; Érkező szakasz</div>';arrs.forEach(a=>{const col=C[a.runner]||'#aaa';const sp=a.sponsor?`<div class="pw-seg-sponsor">&#x1F4CB; ${a.sponsor}</div>`:'';html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-runner" style="color:${col}">&#x1F3C3; ${a.runner}</div><div class="pw-seg-route">${a.from} &#x2192; ${wp.name}</div>${sp}</div>`;}); }
   const deps=wp.departures||[];
   if(deps.length){html+='<div class="pw-section-label">&#x2191; Induló szakasz</div>';deps.forEach(d=>{const col=C[d.runner]||'#aaa';const sp=d.sponsor?`<div class="pw-seg-sponsor">&#x1F4CB; ${d.sponsor}</div>`:'';html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-runner" style="color:${col}">&#x1F3C3; ${d.runner}</div><div class="pw-seg-route">${wp.name} &#x2192; ${d.to}</div>${sp}</div>`;}); }
-  html+=`<div class="pw-coord">${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</div><div class="pw-gmlink" onclick="window.open('${gm}','_blank')">&#x1F4CD; Megnyitás Google Mapsben</div>`;
+  html+=`<div class="pw-coord">${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</div><div class="pw-navlinks"><div class="pw-navbtn" title="Megnyitás Google Mapsben" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="24" height="24" style="object-fit:contain;border-radius:4px"></div><div class="pw-navbtn" title="Megnyitás Waze-ben" onclick="window.open('https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="24" height="24" style="object-fit:contain;border-radius:4px"></div></div>`; 
   marker.bindPopup(html,{maxWidth:300});
   marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
   marker.addTo(map);
