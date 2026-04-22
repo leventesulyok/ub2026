@@ -317,14 +317,13 @@ async function fetchAllWeather() {
 // ---- FETCH SHEETS ----
 async function fetchSheets() {
   try {
-    const vel = document.getElementById('ub-version');
     const t = Date.now();
     const [r1, r2] = await Promise.all([
       fetch(SHEETS_KALK + '&t=' + t, {cache:'no-store'}),
       fetch(SHEETS_VALTAS + '&t=' + t, {cache:'no-store'})
     ]);
-    if(!r1.ok) { console.error('[UB] Kalk fetch error:', r1.status, r1.statusText); if(vel) vel.textContent='⚠️ Sheets hiba '+r1.status; return; }
-    if(!r2.ok) { console.error('[UB] Valtas fetch error:', r2.status, r2.statusText); if(vel) vel.textContent='⚠️ Sheets hiba '+r2.status; return; }
+    if(!r1.ok) { console.error('[UB] Kalk fetch error:', r1.status, r1.statusText); const ve=document.getElementById('ub-version'); if(ve) ve.textContent='⚠️ Sheets hiba '+r1.status; return; }
+    if(!r2.ok) { console.error('[UB] Valtas fetch error:', r2.status, r2.statusText); const ve2=document.getElementById('ub-version'); if(ve2) ve2.textContent='⚠️ Sheets hiba '+r2.status; return; }
     const [csv1, csv2] = await Promise.all([r1.text(), r2.text()]);
     console.log('[UB] csv1 first 200:', csv1.substring(0,200));
     console.log('[UB] csv2 first 200:', csv2.substring(0,200));
@@ -337,9 +336,26 @@ async function fetchSheets() {
     const valtasRows = parseCSV(csv2);
 
     // Build váltás lookup by name
+    const vKeys = valtasRows.length ? Object.keys(valtasRows[0]) : [];
+    function findVKey(exact, partial) {
+      return vKeys.find(k=>k===exact) || vKeys.find(k=>k.includes(partial)) || null;
+    }
+    const V = {
+      pont:    findVKey('Váltópont', 'ltópont'),
+      ido:     findVKey('Váltás ideje', 'ltás ideje'),
+      indul:   findVKey('Indulás a szállásról', 'zállásról'),
+      futo1:   findVKey('Futó1', 'utó1'),
+      futo2:   findVKey('Futó2', 'utó2'),
+      valto1:  findVKey('Váltó1', 'ltó1'),
+      valto2:  findVKey('Váltó2', 'ltó2'),
+      sofor:   findVKey('Sofőr a váltópontra', 'of'),
+      kocsi1:  findVKey('Kocsi1 - váltó', 'ocsi1'),
+      kocsi2:  findVKey('Kocsi2 - maradó', 'ocsi2'),
+    };
+    console.log('[UB] valtas key mapping:', V);
     const valtasMap = {};
     valtasRows.forEach(row => {
-      const nm = (row['Váltópont']||'').trim();
+      const nm = V.pont ? (row[V.pont]||'').trim() : '';
       if(nm) valtasMap[nm] = row;
     });
 
@@ -347,10 +363,30 @@ async function fetchSheets() {
     // kalk has 58 data rows after headers (F4 = first header)
     // CSV will have some empty leading rows - filter to rows with ÉRKEZÉS value
     console.log('[UB] kalkRows sample:', kalkRows.slice(0,3));
+    if(kalkRows.length > 0) console.log('[UB] kalk columns:', Object.keys(kalkRows[0]));
+    // Key finder: exact match first, then partial
+    function findKey(keys, exact, partial) {
+      return keys.find(k=>k===exact) || keys.find(k=>k.includes(partial)) || null;
+    }
+    const kKeys = kalkRows.length ? Object.keys(kalkRows[0]) : [];
+    const K = {
+      hossz:  findKey(kKeys, 'SZAKASZ HOSSZA', 'HOSSZ'),
+      indul:  findKey(kKeys, 'INDULÁS', 'NDUL'),
+      erkez:  findKey(kKeys, 'ÉRKEZÉS', 'RKEZÉS') || kKeys.find(k=>k==='ÉRKEZÉS'),
+      nev:    findKey(kKeys, 'SZAKASZ NÉV', 'NÉV'),
+      futo:   findKey(kKeys, 'FUTÓ', 'FUT'),
+      tempo:  findKey(kKeys, 'TEMPÓ', 'TEMP'),
+      ido:    findKey(kKeys, 'FUTÁSIDŐ', 'IDŐ'),
+      valt:   findKey(kKeys, 'VÁLTÓPONTHOZ ÉRKEZÉS IDEJE', 'LTÓP')
+    };
+    console.log('[UB] kalk key mapping:', K);
     const dataRows = kalkRows.filter(r => {
-      const erkezes = r['ÉRKEZÉS'] || r['\u00c9RKEZ\u00c9S'] || '';
-      return erkezes.match(/\d{1,2}:\d{2}/);
+      const erkezes = K.erkez ? r[K.erkez] : '';
+      const futo = K.futo ? r[K.futo] : '';
+      return (erkezes && erkezes.match(/\d{1,2}:\d{2}/)) || (futo && futo.trim().length > 0);
     });
+    console.log('[UB] dataRows found:', dataRows.length);
+    if(dataRows.length > 0) console.log('[UB] first dataRow:', dataRows[0]);
     console.log('[UB] dataRows found:', dataRows.length);
 
     dataRows.forEach((row, segIdx) => {
@@ -358,11 +394,11 @@ async function fetchSheets() {
       if(idx >= W.length) return;
 
       // Update arrival time at destination W point
-      const arrTime = (row['VÁLTÓPONTHOZ ÉRKEZÉS IDEJE']||'').substring(0,5);
-      if(arrTime) W[idx].arrival = arrTime;
+      const arrTime = K.valt ? (row[K.valt]||'').substring(0,5) : '';
+      if(arrTime && arrTime.match(/\d{1,2}:\d{2}/)) W[idx].arrival = arrTime;
 
-      // Update runner for this segment's departure from W[segIdx]
-      const runner = (row['FUT\u00d3']||row['FUTÓ']||'').trim();
+      // Update runner
+      const runner = K.futo ? (row[K.futo]||'').trim() : '';
       if(runner) {
         if(W[segIdx].departures && W[segIdx].departures.length > 0) {
           W[segIdx].departures[0].runner = runner;
@@ -376,9 +412,9 @@ async function fetchSheets() {
         }
       }
 
-      // Update departure time (INDULÁS) on W[segIdx]
-      const depTime = (row['INDULÁS']||'').substring(0,5);
-      if(depTime && segIdx === 0) W[0].arrival = depTime;
+      // Update departure time
+      const depTime = K.indul ? (row[K.indul]||'').substring(0,5) : '';
+      if(depTime && segIdx === 0 && depTime.match(/\d{1,2}:\d{2}/)) W[0].arrival = depTime;
     });
 
     // Update W from váltás map (relay points)
@@ -386,25 +422,23 @@ async function fetchSheets() {
       const v = valtasMap[wp.name];
       if(!v) return;
       // Update relay times
-      const valtasIdo = (v['Váltás ideje']||'').substring(0,5);
+      const valtasIdo = V.ido ? (v[V.ido]||'').substring(0,5) : '';
       if(valtasIdo) {
         wp.arrival = valtasIdo;
         wp.relay_time = valtasIdo;
       }
-      // Update relay runners
-      const f1 = (v['Futó1']||'').trim();
-      const f2 = (v['Futó2']||'').trim();
-      const v1 = (v['Váltó1']||'').trim();
-      const v2 = (v['Váltó2']||'').trim();
+      const f1 = V.futo1 ? (v[V.futo1]||'').trim() : '';
+      const f2 = V.futo2 ? (v[V.futo2]||'').trim() : '';
+      const v1 = V.valto1 ? (v[V.valto1]||'').trim() : '';
+      const v2 = V.valto2 ? (v[V.valto2]||'').trim() : '';
       if(wp.relay) {
         if(f1||f2) wp.relay.futak = [f1||'-', f2||'-'];
         if(v1||v2) wp.relay.valtak = [v1||'-', v2||'-'];
       }
-      // Update car/driver
-      const sofor = (v['Sofőr a váltópontra']||'').trim();
-      const kocsi1 = (v['Kocsi1 - váltó']||'').trim();
-      const kocsi2 = (v['Kocsi2 - maradó']||'').trim();
-      const indulas = (v['Indulás a szállásról']||'').trim();
+      const sofor = V.sofor ? (v[V.sofor]||'').trim() : '';
+      const kocsi1 = V.kocsi1 ? (v[V.kocsi1]||'').trim() : '';
+      const kocsi2 = V.kocsi2 ? (v[V.kocsi2]||'').trim() : '';
+      const indulas = V.indul ? (v[V.indul]||'').trim() : '';
       if(sofor) wp.sofor = sofor;
       if(kocsi1) wp.kocsi = kocsi1;
       if(kocsi2) wp.kocsi2 = kocsi2;
