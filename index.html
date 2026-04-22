@@ -366,31 +366,36 @@ function applyValtas(rows) {
     return isFinish ? list[list.length-1] : list[0];
   }
 
-  // Step 3: For each CSV name, iterate rows and match W waypoints
+  // Step 3: For each CSV row find best matching W waypoint and activate it
   Object.keys(Vlist).forEach(csvName => {
     if (csvName === 'Váltópont') return;
     const rows_for_name = Vlist[csvName];
     const nn = normName(csvName);
 
-    // Find ALL W waypoints matching this CSV name
-    const matchingWps = [];
-    W.forEach(wp => {
+    // Find ALL W waypoints matching this CSV name (exact or prefix)
+    const candidates = W.filter(wp => {
       const wn = normName(wp.name);
-      if (wn === nn) { matchingWps.push(wp); return; }
+      if (wn === nn) return true;
       const minL = Math.min(wn.length, nn.length);
-      if (minL >= 8 && wn.slice(0,minL) === nn.slice(0,minL)) matchingWps.push(wp);
+      return minL >= 8 && wn.slice(0,minL) === nn.slice(0,minL);
     });
-    if (!matchingWps.length) return;
+    if (!candidates.length) return;
 
     rows_for_name.forEach((row, rowIdx) => {
-      // Match row to W waypoint:
-      // If multiple W matches (start + finish), pair by index
-      // (first CSV row → non-finish wp, last CSV row → finish wp)
-      let bestWp = matchingWps.find(wp => !wp.finish) || matchingWps[0];
-      if (rows_for_name.length > 1) {
-        bestWp = rowIdx === rows_for_name.length-1
-          ? (matchingWps.find(wp => wp.finish) || matchingWps[matchingWps.length-1])
-          : (matchingWps.find(wp => !wp.finish) || matchingWps[0]);
+      const isLastRow = rowIdx === rows_for_name.length - 1;
+
+      // Pick best waypoint:
+      // For finish row → prefer finish=true waypoint
+      // Otherwise → prefer already-special (non-finish) → then any non-special
+      let bestWp;
+      if (rows_for_name.length > 1 && isLastRow) {
+        bestWp = candidates.find(wp => wp.finish)
+               || candidates.find(wp => wp.special && !wp.finish)
+               || candidates[candidates.length - 1];
+      } else {
+        bestWp = candidates.find(wp => wp.special && !wp.finish)
+               || candidates.find(wp => !wp.special && !wp.finish)
+               || candidates[0];
       }
       if (!bestWp) return;
 
