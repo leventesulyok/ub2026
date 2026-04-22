@@ -36,6 +36,7 @@ header p{font-size:10px;color:#9999cc}
 .pw-relay-label{font-size:9px;color:#998855;width:38px;flex-shrink:0}
 .pw-car-grid{display:grid;grid-template-columns:auto 1fr;gap:3px 10px;margin-top:6px;padding-top:6px;border-top:1px solid rgba(255,200,0,.15);font-size:10px}
 .pw-car-label{color:#998855;white-space:nowrap}
+.pw-szallason{font-size:10px;color:#8888bb;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.08);line-height:1.5}
 .pw-car-val{color:#ddeeff}
 .pw-runner-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:9px;font-size:10px;font-weight:600;background:rgba(255,255,255,.07)}
 .pw-dot{width:7px;height:7px;border-radius:50%;display:inline-block}
@@ -247,7 +248,7 @@ function applyUB25(rows) {
     const arrR = wp.arrivals.length ? wp.arrivals[wp.arrivals.length-1].runner : null;
     const depR = wp.departures.length ? wp.departures[0].runner : null;
     if (arrR && depR && arrR !== depR) { wp.runner_change={out:arrR,in:depR}; wp.is_relay_white=true; }
-    else wp.runner_change = null;
+    else { wp.runner_change = null; wp.is_relay_white = false; }
   });
 }
 
@@ -347,7 +348,14 @@ W.forEach((wp,i)=>{
     html+=`<div class="pw-relay-box"><div class="pw-relay-title"><span>&#x1F501; Váltási rend</span>${rt}</div>`;
     if(r.futak&&r.futak[0]!=='-') html+=`<div class="pw-relay-row"><span class="pw-relay-label">Fut:</span>${chip(r.futak[0])} &nbsp; ${chip(r.futak[1])}</div>`;
     if(r.valtak&&r.valtak[0]!=='-') html+=`<div class="pw-relay-row" style="margin-top:3px"><span class="pw-relay-label">Vált:</span>${chip(r.valtak[0])} &nbsp; ${chip(r.valtak[1])}</div>`;
-    html+=`<div class="pw-car-grid"><span class="pw-car-label">&#x1F697; Kocsi 1:</span><span class="pw-car-val">${wp.kocsi||'–'}</span><span class="pw-car-label">&#x1F46A; Sofőr:</span><span class="pw-car-val">${wp.sofor||'–'}</span><span class="pw-car-label">&#x1F697; Kocsi 2:</span><span class="pw-car-val">${wp.kocsi2||'–'}</span></div></div>`;
+    html+=`<div class="pw-car-grid"><span class="pw-car-label">&#x1F697; Kocsi 1:</span><span class="pw-car-val">${wp.kocsi||'–'}</span><span class="pw-car-label">&#x1F46A; Sofőr:</span><span class="pw-car-val">${wp.sofor||'–'}</span><span class="pw-car-label">&#x1F697; Kocsi 2:</span><span class="pw-car-val">${wp.kocsi2||'–'}</span></div>`;
+    if(wp._szallas||wp._indulas||wp._autoidő){
+      html+=`<div class="pw-car-grid" style="margin-top:4px;border-top:1px solid rgba(255,255,255,0.1);padding-top:6px"><span class="pw-car-label">🏠 Szállás:</span><span class="pw-car-val">${wp._szallas||'–'}</span><span class="pw-car-label">⏰ Indulás:</span><span class="pw-car-val">${wp._indulas||'–'}</span><span class="pw-car-label">🚗 Autóidő:</span><span class="pw-car-val">${wp._autoidő||'–'}</span></div>`;
+    }
+    if(wp._szallason&&wp._szallason.length){
+      html+=`<div class="pw-szallason"><span style="color:#7777aa;font-size:10px">🛌 Szálláson:</span> ${wp._szallason.join(', ')}</div>`;
+    }
+    html+=`</div>`;
   }
   if(isWhite&&wp.runner_change){
     const rc=wp.runner_change;
