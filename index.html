@@ -506,17 +506,6 @@ function toggleGPS() {
 
 function startGPS() {
   if (!navigator.geolocation) { alert('GPS nem elérhető ezen az eszközön.'); return; }
-  // Trigger permission dialog explicitly first
-  navigator.geolocation.getCurrentPosition(
-    () => { console.log('GPS engedély megadva'); },
-    err => { 
-      setStatus(false, 'GPS hiba: ' + (err.code===1?'Engedély megtagadva':err.code===2?'Helymeghatározás nem elérhető':'Timeout'));
-      _gpsActive = false;
-      const btn = document.getElementById('gpsBtn');
-      if(btn) btn.classList.remove('gps-on');
-    },
-    {enableHighAccuracy:true, timeout:10000}
-  );
   _gpsActive = true;
   _gpsWatchId = navigator.geolocation.watchPosition(pos => {
     const lat = pos.coords.latitude, lon = pos.coords.longitude;
@@ -536,8 +525,11 @@ function startGPS() {
     }
   }, err => {
     console.warn('GPS hiba:', err.message);
-    setStatus(false, 'GPS: ' + err.message);
+    const msg = err.code===1 ? 'Engedély megtagadva' : err.code===2 ? 'Helymeghatározás nem elérhető' : err.message;
+    setStatus(false, 'GPS: ' + msg);
     stopGPS();
+    const btn = document.getElementById('gpsBtn');
+    if (btn) btn.classList.remove('gps-on');
   }, {enableHighAccuracy:true, maximumAge:5000, timeout:15000});
 }
 
@@ -616,58 +608,6 @@ function segKm(seg) {
 }
 
 
-// ═══════════════════════════════════════════════════════════════════════════════
-// RUNNER STATS PANEL
-// ═══════════════════════════════════════════════════════════════════════════════
-function buildStatsPanel() {
-  const statsEl = document.getElementById('statsPanel');
-  if (!statsEl) return;
-
-  const stats = {};
-  Object.keys(C).forEach(r => { stats[r] = {km:0, segs:0, times:[]}; });
-
-  S.forEach(seg => {
-    if (!seg.runner || !stats[seg.runner]) return;
-    const km = segDistKm(seg.coords);
-    stats[seg.runner].km += km;
-    stats[seg.runner].segs += 1;
-    if (seg.time_from && seg.time_to) {
-      const [h1,m1] = seg.time_from.split(':').map(Number);
-      const [h2,m2] = seg.time_to.split(':').map(Number);
-      let totalMin = (h2*60+m2) - (h1*60+m1);
-      if (totalMin < 0) totalMin += 24*60;
-      if (totalMin > 0 && km > 0) stats[seg.runner].times.push(totalMin/km);
-    }
-  });
-
-  statsEl.innerHTML = '<div class="stats-title">📊 Futói statisztika</div>' +
-    Object.entries(stats).map(([runner, s]) => {
-      const color = C[runner] || '#aaa';
-      const km = s.km.toFixed(1);
-    const dplus = S.filter(sg=>sg.runner===runner).reduce((a,sg)=>a+(sg.dplus||0),0);
-      const avgPace = s.times.length ? s.times.reduce((a,b)=>a+b,0)/s.times.length : 0;
-      const paceStr = avgPace > 0 ? (Math.floor(avgPace) + ':' + String(Math.round((avgPace%1)*60)).padStart(2,'0') + ' /km') : '–';
-      return `<div class="stat-row">
-        <div class="stat-dot" style="background:${color}"></div>
-        <div class="stat-name" style="color:${color}">${runner}</div>
-        <div class="stat-km">${km} km</div>
-        <div class="stat-pace">${paceStr}</div>
-        <div class="stat-dplus">⬆️${dplus}m</div><div class="stat-segs">${s.segs} sz.</div>
-      </div>`;
-    }).join('');
-
-  // Finish estimate + progress
-  const totalKm = S.reduce((a,seg)=>a+segDistKm(seg.coords),0);
-  const doneKm  = S.filter(seg=>seg.time_to).reduce((a,seg)=>a+segDistKm(seg.coords),0);
-  const pct = totalKm>0 ? Math.min(100,(doneKm/totalKm*100)).toFixed(1) : 0;
-  const lastSeg = [...S].reverse().find(s=>s.time_to);
-  const finishStr = lastSeg ? lastSeg.time_to : '–';
-  statsEl.innerHTML += '<div class="stats-summary">'
-    +'<div class="stats-sum-row">🏁 Becsült befejezés: <b>'+finishStr+'</b></div>'
-    +'<div class="stats-sum-row">📏 '+doneKm.toFixed(1)+' / '+totalKm.toFixed(1)+' km'
-    +'<div class="stats-progbar"><div class="stats-progfill" style="width:'+pct+'%"></div></div></div>'
-    +'</div>';
-}
 
 // ═══════════════════════════════════════════════════════════════════════════════
 // OFFLINE CACHE (localStorage)
@@ -749,9 +689,7 @@ function paceChips(km, runnerPace) {
   const toStr = sec => Math.floor(sec/60)+':'+(sec%60<10?'0':'')+sec%60;
   const own = toSec(runnerPace || '6:00');
   const step = 30; // 30 sec/km step
-  const paces = runnerPace
-    ? [own - step, own, own + step]
-    : [own - step, own, own + step];
+  const paces = [own - step, own, own + step];
   return paces.map(sec => {
     const mins = Math.round(parseFloat(km) * sec / 60);
     const h = Math.floor(mins/60), m = mins%60;
@@ -992,7 +930,6 @@ async function fetchAndRender() {
     }
     updateNowRunning();
     updateHeaderProgress();
-    buildStatsPanel();
   } catch(e) { console.error('buildMap:', e); setStatus(false, 'buildMap: '+e.message); return; }
   const _t = new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'});
   setStatus(true, 'OK');
