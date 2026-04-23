@@ -188,10 +188,7 @@ header p{font-size:10px;color:#9999cc}
   </div>
 </header>
 <div id="map">
-  <div id="sun-legend">
-    <div class="sun-item"><svg width="28" height="8"><line x1="0" y1="4" x2="28" y2="4" stroke="#FF6B6B" stroke-width="5" stroke-linecap="round"/></svg><span>Nappal</span></div>
-    <div class="sun-item"><svg width="32" height="10"><line x1="0" y1="5" x2="32" y2="5" stroke="#FF6B6B" stroke-width="5" stroke-linecap="round" opacity="0.95"/><line x1="0" y1="5" x2="32" y2="5" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-dasharray="6 5" opacity="0.85"/></svg><span>&#x1F319; Éjszaka</span></div>
-    <div class="sun-item">&#x1F31E; 05:54 &nbsp; &#x1F317; 20:15</div>
+  
   </div>
 </div>
 <div id="ctrl"><span>Futók:</span></div>
@@ -843,6 +840,8 @@ function buildWpHtml(wp, i) {
   const isSpecial=wp.special&&!wp.finish;
   const isWhite=wp.is_relay_white;
   const isFinish=wp.finish;
+  const nightTag=isNight?' &#x1F319;':' &#x2600;&#xFE0F;';
+  const arrBadge=wp.arrival?`<span class="pw-arrival"><span class="pw-arrival-label">Várható érkezés</span><span class="pw-arrival-time">&#x23F0; ${wp.arrival}</span></span>`:'';
   let html=`<div class="pw-title"><span>${wp.name}${nightTag}</span>${arrBadge}</div>`;
   const waze=`https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes`;
   const navIcons=`<div class="pw-nav-inline"><div class="pw-navbtn" title="Google Maps" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="22" height="22" style="object-fit:contain;border-radius:3px"></div><div class="pw-navbtn" title="Waze" onclick="window.open('${waze}','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="22" height="22" style="object-fit:contain;border-radius:3px"></div></div>`;
@@ -942,9 +941,7 @@ W.forEach((wp,i)=>{
   }
   const icon=L.divIcon({html:iconHtml,iconSize:size,iconAnchor:anchor,className:''});
   const marker=L.marker([wp.lat,wp.lon],{icon,zIndexOffset:isFinish?300:(isSpecial?200:(isWhite?100:0))});
-  const arrBadge=wp.arrival?`<span class="pw-arrival"><span class="pw-arrival-label">Várható érkezés</span><span class="pw-arrival-time">&#x23F0; ${wp.arrival}</span></span>`:'';
-  const nightTag=isNight?' &#x1F319;':' &#x2600;&#xFE0F;';
-    const html = buildWpHtml(wp, i);
+  const html = buildWpHtml(wp, i);
   marker.bindPopup(html,{maxWidth:500});
 
   marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
