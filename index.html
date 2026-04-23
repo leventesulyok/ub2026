@@ -144,7 +144,7 @@ header p{font-size:10px;color:#9999cc}
 .pw-info-row .pw-szallas-box{flex:1;min-width:0;margin-top:0;padding:6px 8px;border-top:none;border-left:1px solid rgba(255,255,255,0.1)}
 
 /* Ki fut most bar */
-#nowRunning{transition:opacity .5s}
+#nowRunning{transition:opacity .3s}
 
 /* Stats summary */
 .stats-summary{margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);font-size:11px;color:#aaaacc}
@@ -728,6 +728,11 @@ function buildStatsModal() {
     <td style="text-align:right;padding:7px 8px 0;color:#aaddaa">⬆️ ${totalDp}m</td>
     <td></td>
   </tr></tfoot></table>
+  </div>
+  <div style="margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,0.1);font-size:11px;color:#aaaacc">
+    <div style="margin-bottom:5px">🏁 Becsült befejezés: <b style="color:#eeeeff">${(()=>{const ls=[...S].reverse().find(s=>s.time_to);return ls?ls.time_to:'–';})()}</b></div>
+    <div>📏 ${(()=>{const done=S.filter(s=>s.time_to).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0).toFixed(1);const total=S.reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0).toFixed(1);const pct=total>0?Math.min(100,(done/total*100)).toFixed(1):0;return done+' / '+total+' km <div style="height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:4px;overflow:hidden"><div style="height:100%;width:'+pct+'%;background:linear-gradient(90deg,#4488ff,#44ddaa);border-radius:3px"></div></div>';})()}</div>
+  </div>
   </div></div>`;
 
   document.body.insertAdjacentHTML('beforeend', html);
@@ -954,6 +959,11 @@ Object.entries(C).forEach(([runner, color]) => {
   sep.style.cssText = 'flex:1';
   ctrlEl.appendChild(sep);
 
+  const nowEl = document.createElement('span');
+  nowEl.id = 'nowRunning';
+  nowEl.style.cssText = 'font-size:11px;color:#ccccee;padding:0 10px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:360px;display:none';
+  ctrlEl.insertBefore(nowEl, sep);
+
   const gpsBtn = document.createElement('button');
   gpsBtn.id = 'gpsBtn'; gpsBtn.title = 'GPS követés bekapcsolása';
   gpsBtn.innerHTML = '📍 GPS';
@@ -985,6 +995,5 @@ setInterval(fetchAndRender, 60000);
 
 
 </script>
-<div id="nowRunning" style="display:none;position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:9000;background:rgba(15,15,35,0.93);border:1px solid rgba(255,255,255,0.13);border-radius:20px;padding:7px 18px;font-size:12px;color:#eeeeff;box-shadow:0 2px 16px rgba(0,0,0,0.6);white-space:nowrap;pointer-events:none;backdrop-filter:blur(4px)"></div>
 </body>
 </html>
