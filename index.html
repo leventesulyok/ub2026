@@ -259,6 +259,7 @@ let _weatherLastFetch = 0;
 function clearDynLayers() {
   _dynLayers.forEach(l => { try { map.removeLayer(l); } catch(e) {} });
   _dynLayers = [];
+  _wpMarkers.clear();
   Object.keys(RG).forEach(k => delete RG[k]);
 }
 
@@ -756,6 +757,7 @@ function paceChips(km, runnerPace) {
 
 let _activeSegs = [];
 let _activePolylines = new Map();
+const _wpMarkers = new Map(); // index -> marker
 
 function getActiveSegments() {
   const now = new Date();
@@ -796,7 +798,14 @@ function updateHeaderProgress() {
   const totalKm = S.reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
   const nowMinsP = (new Date()).getHours()*60+(new Date()).getMinutes();
   const parseTP = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; };
-  const doneKm  = S.filter(s=>{ const t=parseTP(s.time_to); return t!==null && t<=nowMinsP; }).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
+  const doneKm  = S.filter(s=>{ 
+    let t=parseTP(s.time_to); 
+    if(t===null) return false;
+    if(t < 12*60) t += 24*60; // midnight crossing: times like 02:42 -> 26:42
+    let adjNow = nowMinsP;
+    if(adjNow < 12*60) adjNow += 24*60;
+    return t <= adjNow; 
+  }).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
   const pct = totalKm>0 ? Math.min(100,(doneKm/totalKm*100)) : 0;
   fill.style.width = pct.toFixed(1)+'%';
   const lastSeg = [...S].reverse().find(s=>s.time_to);
@@ -815,7 +824,7 @@ function updateNowRunning() {
   const parts = active.map(i => {
     const seg = S[i];
     const col = C[seg.runner] || '#aaa';
-    const km = segDistKm(seg.coords).toFixed(1);
+    const km = (seg.coords&&seg.coords.length ? segDistKm(seg.coords) : (parseFloat(seg.km)||0)).toFixed(1);
     return '<span style="color:'+col+';font-weight:700">🏃 '+seg.runner+'</span> · '+seg.from+' → '+seg.to+' · '+km+' km';
   });
   el.innerHTML = parts.join('&nbsp;&nbsp;|&nbsp;&nbsp;');
@@ -907,7 +916,7 @@ html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body">
   html+=`<div class="pw-coord">${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</div>`; 
   marker.bindPopup(html,{maxWidth:500});
   marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
-  marker.addTo(map); _dynLayers.push(marker);
+  marker.addTo(map); _dynLayers.push(marker); _wpMarkers.set(i, marker);
 });
 }
 
@@ -941,7 +950,15 @@ async function fetchAndRender() {
   try { await fetchWeather(); } catch(e) { console.warn('Weather (non-fatal):', e); }
   W.forEach(wp => { try { const w = getWeather(wp.lat, wp.arrival); if (w) wp.weather = w; } catch(e) {} });
   try {
+    // Save open popup state before rebuild
+    let _openWpIdx = -1;
+    _wpMarkers.forEach((m, idx) => { if (m.isPopupOpen()) _openWpIdx = idx; });
     buildMap();
+    // Restore open popup after rebuild
+    if (_openWpIdx >= 0) {
+      const m = _wpMarkers.get(_openWpIdx);
+      if (m) setTimeout(() => m.openPopup(), 50);
+    }
     updateNowRunning();
     updateHeaderProgress();
     buildStatsPanel();
