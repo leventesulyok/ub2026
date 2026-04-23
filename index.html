@@ -143,6 +143,26 @@ header p{font-size:10px;color:#9999cc}
 .pw-info-row .pw-car-grid{flex:1;min-width:0;margin-top:0;padding-top:0;border-top:none}
 .pw-info-row .pw-szallas-box{flex:1;min-width:0;margin-top:0;padding:6px 8px;border-top:none;border-left:1px solid rgba(255,255,255,0.1)}
 
+/* Ki fut most bar */
+#nowRunning{transition:opacity .5s}
+
+/* Stats summary */
+.stats-summary{margin-top:8px;padding-top:6px;border-top:1px solid rgba(255,255,255,0.1);font-size:11px;color:#aaaacc}
+.stats-sum-row{margin-bottom:5px}
+.stats-sum-row b{color:#eeeeff}
+.stats-progbar{height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:3px;overflow:hidden}
+.stats-progfill{height:100%;background:linear-gradient(90deg,#4488ff,#44ddaa);border-radius:3px;transition:width .5s}
+
+/* Mobile responsive popup */
+@media (max-width:420px){
+  .leaflet-popup-content-wrapper{max-width:96vw!important}
+  .leaflet-popup-content{min-width:unset!important}
+  .pw-info-row{flex-direction:column}
+  .pw-info-row .pw-szallas-box{border-left:none;border-top:1px solid rgba(255,255,255,0.1);padding-left:0;margin-top:4px}
+  .pw-relay-people{flex-direction:column}
+  .pw-pace-row{flex-wrap:wrap!important}
+}
+
 .pw-szallason{font-size:10px;color:#8888bb;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.08);line-height:1.5}
 .pw-car-val{color:#ddeeff}
 .pw-runner-chip{display:inline-flex;align-items:center;gap:3px;padding:1px 6px;border-radius:9px;font-size:10px;font-weight:600;background:rgba(255,255,255,.07)}
@@ -247,13 +267,25 @@ function setStatus(ok, msg) {
   if (!el) {
     el = document.createElement('div');
     el.id = '_dynStatus';
-    el.style.cssText = 'position:fixed;top:8px;right:10px;z-index:9999;font-size:11px;padding:4px 11px;border-radius:10px;pointer-events:none;transition:opacity 1.5s';
+    el.style.cssText = 'position:fixed;top:8px;right:10px;z-index:9999;font-size:11px;padding:4px 11px;border-radius:10px;pointer-events:none;transition:all .4s';
     document.body.appendChild(el);
   }
-  el.style.background = ok ? 'rgba(0,180,80,0.9)' : 'rgba(200,50,50,0.9)';
-  el.style.color = '#fff'; el.style.opacity = '1';
-  el.textContent = (ok ? '✓ ' : '⚠ ') + msg;
-  if (ok) setTimeout(() => { el.style.opacity = '0'; }, 3000);
+  let bar = document.getElementById('_offlineBar');
+  if (!ok && msg && msg.includes('Offline')) {
+    if (!bar) {
+      bar = document.createElement('div');
+      bar.id = '_offlineBar';
+      bar.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9998;background:rgba(160,100,0,0.93);color:#fff;font-size:12px;font-weight:700;text-align:center;padding:6px;pointer-events:none;backdrop-filter:blur(3px)';
+      document.body.appendChild(bar);
+    }
+    bar.textContent = '⚠️ Offline – ' + msg.replace('Offline – ','');
+    bar.style.display = 'block';
+  } else if (bar) { bar.style.display = 'none'; }
+  el.style.background = ok ? 'rgba(40,160,80,0.85)' : (msg&&msg.includes('Offline')) ? 'rgba(160,100,0,0.85)' : 'rgba(180,40,40,0.85)';
+  el.style.color = '#fff';
+  el.textContent = ok ? '✓ ' + msg : msg;
+  el.style.opacity = '1';
+  if (ok) setTimeout(() => { el.style.opacity='0'; }, 4000);
 }
 
 function parseCSV(text) {
@@ -613,6 +645,18 @@ function buildStatsPanel() {
         <div class="stat-dplus">⬆️${dplus}m</div><div class="stat-segs">${s.segs} sz.</div>
       </div>`;
     }).join('');
+
+  // Finish estimate + progress
+  const totalKm = S.reduce((a,seg)=>a+segDistKm(seg.coords),0);
+  const doneKm  = S.filter(seg=>seg.time_to).reduce((a,seg)=>a+segDistKm(seg.coords),0);
+  const pct = totalKm>0 ? Math.min(100,(doneKm/totalKm*100)).toFixed(1) : 0;
+  const lastSeg = [...S].reverse().find(s=>s.time_to);
+  const finishStr = lastSeg ? lastSeg.time_to : '–';
+  statsEl.innerHTML += '<div class="stats-summary">'
+    +'<div class="stats-sum-row">🏁 Becsült befejezés: <b>'+finishStr+'</b></div>'
+    +'<div class="stats-sum-row">📏 '+doneKm.toFixed(1)+' / '+totalKm.toFixed(1)+' km'
+    +'<div class="stats-progbar"><div class="stats-progfill" style="width:'+pct+'%"></div></div></div>'
+    +'</div>';
 }
 
 // ═══════════════════════════════════════════════════════════════════════════════
@@ -744,6 +788,23 @@ function updateActiveSegments() {
 
 setInterval(updateActiveSegments, 30000);
 
+function updateNowRunning() {
+  const el = document.getElementById('nowRunning');
+  if (!el) return;
+  const active = getActiveSegments();
+  if (!active.length) { el.style.display='none'; return; }
+  const parts = active.map(i => {
+    const seg = S[i];
+    const col = C[seg.runner] || '#aaa';
+    const km = segDistKm(seg.coords).toFixed(1);
+    return '<span style="color:'+col+';font-weight:700">🏃 '+seg.runner+'</span> · '+seg.from+' → '+seg.to+' · '+km+' km';
+  });
+  el.innerHTML = parts.join('&nbsp;&nbsp;|&nbsp;&nbsp;');
+  el.style.display = 'block';
+}
+setInterval(updateNowRunning, 10000);
+
+
 function buildMap() {
   clearDynLayers();
 S.forEach((seg,_si)=>{
@@ -862,6 +923,7 @@ async function fetchAndRender() {
   W.forEach(wp => { try { const w = getWeather(wp.lat, wp.arrival); if (w) wp.weather = w; } catch(e) {} });
   try {
     buildMap();
+    updateNowRunning();
     buildStatsPanel();
   } catch(e) { console.error('buildMap:', e); setStatus(false, 'buildMap: '+e.message); return; }
   const _t = new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'});
@@ -923,5 +985,6 @@ setInterval(fetchAndRender, 60000);
 
 
 </script>
+<div id="nowRunning" style="display:none;position:fixed;bottom:14px;left:50%;transform:translateX(-50%);z-index:9000;background:rgba(15,15,35,0.93);border:1px solid rgba(255,255,255,0.13);border-radius:20px;padding:7px 18px;font-size:12px;color:#eeeeff;box-shadow:0 2px 16px rgba(0,0,0,0.6);white-space:nowrap;pointer-events:none;backdrop-filter:blur(4px)"></div>
 </body>
 </html>
