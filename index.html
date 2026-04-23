@@ -337,7 +337,7 @@ function getWeather(lat, arrStr) {
   if (!_weatherCache || !arrStr) return null;
   const hh = parseInt(arrStr.split(':')[0], 10);
   if (isNaN(hh)) return null;
-  const dateStr = '2026-05-08T' + String(hh).padStart(2,'0') + ':00';
+  const dateStr = '2026-04-25T' + String(hh).padStart(2,'0') + ':00';
   const keys = Object.keys(_weatherCache);
   if (!keys.length) return null;
   const best = keys.reduce((a,b) => Math.abs(parseFloat(a)-lat) < Math.abs(parseFloat(b)-lat) ? a : b);
@@ -376,7 +376,7 @@ function applyUB25(rows) {
     if (d) { seg.runner = d.runner; seg.time_to = d.arrival; }
   });
   const sr = rows.find(r => /^\d+:\d+/.test((r[3]||'').trim()));
-  S[0].time_from = sr ? sr[3].trim().slice(0,5) : '';
+  S[0].time_from = sr ? sr[3].trim().split(':').slice(0,2).join(':') : '';
   for (let i=1; i<S.length; i++) S[i].time_from = S[i-1].time_to || '';
   W.forEach(wp => {
     wp.arrivals.forEach(arr => {
@@ -550,7 +550,7 @@ function stopGPS() {
 // ═══════════════════════════════════════════════════════════════════════════════
 // VISSZASZÁMLÁLÓ (relay_time - most, verseny napján)
 // ═══════════════════════════════════════════════════════════════════════════════
-const RACE_DATE = '2026-05-08';
+const RACE_DATE = '2026-04-25';
 
 function parseRaceTime(hhmm) {
   if (!hhmm || !hhmm.includes(':')) return null;
@@ -739,7 +739,7 @@ function buildStatsModal() {
     <td></td>
   </tr></tfoot></table>
   </div>
-  </div></div>`;
+  </div>`;
 
   document.body.insertAdjacentHTML('beforeend', html);
 }
@@ -772,8 +772,7 @@ let _gpsActive = false, _gpsWatchId = null, _gpsMarker = null, _gpsCircle = null
 
 function getActiveSegments() {
   const nowMs = Date.now();
-  const rd = '2026-04-25';
-  const parseAbs = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(rd+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
+  const parseAbs = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(RACE_DATE+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
   return S.reduce((acc, seg, i) => {
     let from = parseAbs(seg.time_from), to = parseAbs(seg.time_to);
     if (from === null && to !== null) from = to - 60*60*1000;
@@ -803,9 +802,8 @@ function updateHeaderProgress() {
   const txt  = document.getElementById('headerProgTxt');
   if (!fill || !txt) return;
   const totalKm = S.reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
-  const _raceDate = '2026-04-25';
   const _nowMs = Date.now();
-  const parseAbsTP = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(_raceDate+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
+  const parseAbsTP = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(RACE_DATE+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
   const doneKm  = S.filter(s=>{ const t=parseAbsTP(s.time_to); return t!==null && t<=_nowMs; }).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
   const pct = totalKm>0 ? Math.min(100,(doneKm/totalKm*100)) : 0;
   fill.style.width = pct.toFixed(1)+'%';
@@ -834,6 +832,34 @@ function updateNowRunning() {
 setInterval(updateNowRunning, 10000);
 
 
+function makeWpIcon(wp) {
+  const isNight = wp.light === 'night';
+  const isSpecial = wp.special && !wp.finish;
+  const isWhite = wp.is_relay_white;
+  const isFinish = wp.finish;
+  let iconHtml, size, anchor;
+  if (isFinish) {
+    iconHtml = '<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 5px rgba(255,200,0,1))">&#x2B50;</div>';
+    size = [22,22]; anchor = [11,11];
+  } else if (isSpecial) {
+    const bg = isNight ? '#1a2d5a' : '#111';
+    const br = isNight ? '#aabbee' : '#fff';
+    const moon = isNight ? '<div style="position:absolute;top:-7px;right:-7px;font-size:10px">&#x1F319;</div>' : '';
+    iconHtml = `<div style="position:relative;width:18px;height:18px;background:${bg};border:2.5px solid ${br};border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,.9)">${moon}</div>`;
+    size = [18,18]; anchor = [9,9];
+  } else if (isWhite) {
+    iconHtml = `<div style="width:14px;height:14px;background:#fff;border:2px solid ${isNight?'#aabbdd':'#333355'};border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.6)"></div>`;
+    size = [14,14]; anchor = [7,7];
+  } else {
+    iconHtml = `<div style="width:11px;height:11px;background:${isNight?'rgba(100,110,140,0.75)':'rgba(130,130,150,0.75)'};border:1.5px solid rgba(180,180,200,0.5);border-radius:50%"></div>`;
+    size = [11,11]; anchor = [5,5];
+  }
+  const icon = L.divIcon({html:iconHtml, iconSize:size, iconAnchor:anchor, className:''});
+  const zIndexOffset = isFinish ? 300 : (isSpecial ? 200 : (isWhite ? 100 : 0));
+  const tooltipOffset = [0, isSpecial||isFinish ? -9 : (isWhite ? -7 : -5)];
+  return { icon, zIndexOffset, tooltipOffset };
+}
+
 function buildWpHtml(wp, i) {
   const gm='https://www.google.com/maps?q='+wp.lat+','+wp.lon;
   const isNight=wp.light==='night';
@@ -848,7 +874,6 @@ function buildWpHtml(wp, i) {
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather-nav-row"><div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C${w.wind!=null?` <span class="pw-wind">💨 ${w.wind} km/h ${w.windDir}</span>`:""}</div><div class="pw-weather-desc">${w.desc}</div></div></div>${navIcons}</div>`;} else { html+=`<div class="pw-weather-nav-row" style="justify-content:flex-end">${navIcons}</div>`; }
   if(isSpecial&&wp.relay){
     const r=wp.relay; const cdStr=wp.relay_time?getCountdown(wp.relay_time):'';
-    const cdBadge=cdStr?`<span class="pw-countdown" data-countdown="${wp.relay_time}">${cdStr?'⏳ '+cdStr:''}</span>`:'';
     const rt=wp.relay_time?`<span class="pw-relay-time">&#x23F0; ${wp.relay_time}</span>`:'';
     html+=`<div class="pw-relay-box"><div class="pw-relay-title"><span>&#x1F501; Váltási rend</span>${cdStr?`<div class="pw-relay-cd"><div class="pw-relay-cd-label">Váltásig</div><div class="pw-relay-cd-val" data-countdown="${wp.relay_time}">⏳ ${cdStr}</div></div>`:''}</div>`;
     if(r.futak&&r.futak[0]!=='-') html+=`<div class="pw-relay-people"><div class="pw-relay-unit"><span class="pw-relay-label">Fut</span><div class="pw-relay-chips">${chip(r.futak[0])} ${chip(r.futak[1])}</div></div>${r.valtak&&r.valtak[0]!=='-'?`<div class="pw-relay-unit"><span class="pw-relay-label">Vált</span><div class="pw-relay-chips">${chip(r.valtak[0])} ${chip(r.valtak[1])}</div></div>`:''}</div>`;
@@ -881,16 +906,18 @@ html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body">
 }
 
 function updateMapData() {
-  // Update waypoint popup content and tooltips without removing markers
+  // Update waypoint popup content, tooltips and icons without removing markers
   W.forEach((wp, i) => {
     const marker = _wpMarkers.get(i);
     if (!marker) return;
     const html = buildWpHtml(wp, i);
     marker.setPopupContent(html);
-    const isSpecial = wp.special && !wp.finish;
-    const isFinish = wp.finish;
-    const isWhite = wp.is_relay_white;
-    marker.setTooltipContent(wp.arrival ? `${wp.name} · ${wp.arrival}` : wp.name);
+    const { icon, zIndexOffset, tooltipOffset } = makeWpIcon(wp);
+    marker.setIcon(icon);
+    marker.setZIndexOffset(zIndexOffset);
+    const tipContent = wp.arrival ? `${wp.name} · ${wp.arrival}` : wp.name;
+    marker.unbindTooltip();
+    marker.bindTooltip(tipContent, { direction:'top', offset:tooltipOffset, opacity:0.97 });
   });
   // Update active segment styles only
   updateActiveSegments();
@@ -917,34 +944,12 @@ S.forEach((seg,_si)=>{
   }
 });
 W.forEach((wp,i)=>{
-
-  const gm='https://www.google.com/maps?q='+wp.lat+','+wp.lon;
-  const isNight=wp.light==='night';
-  const isSpecial=wp.special&&!wp.finish;
-  const isWhite=wp.is_relay_white;
-  const isFinish=wp.finish;
-  let iconHtml,size,anchor;
-  if(isFinish){
-    iconHtml='<div style="font-size:22px;line-height:1;filter:drop-shadow(0 0 5px rgba(255,200,0,1))">&#x2B50;</div>';
-    size=[22,22];anchor=[11,11];
-  } else if(isSpecial){
-    const bg=isNight?'#1a2d5a':'#111'; const br=isNight?'#aabbee':'#fff';
-    const moon=isNight?'<div style="position:absolute;top:-7px;right:-7px;font-size:10px">&#x1F319;</div>':'';
-    iconHtml=`<div style="position:relative;width:18px;height:18px;background:${bg};border:2.5px solid ${br};border-radius:50%;box-shadow:0 0 6px rgba(0,0,0,.9)">${moon}</div>`;
-    size=[18,18];anchor=[9,9];
-  } else if(isWhite){
-    iconHtml=`<div style="width:14px;height:14px;background:#fff;border:2px solid ${isNight?'#aabbdd':'#333355'};border-radius:50%;box-shadow:0 1px 5px rgba(0,0,0,.6)"></div>`;
-    size=[14,14];anchor=[7,7];
-  } else {
-    iconHtml=`<div style="width:11px;height:11px;background:${isNight?'rgba(100,110,140,0.75)':'rgba(130,130,150,0.75)'};border:1.5px solid rgba(180,180,200,0.5);border-radius:50%"></div>`;
-    size=[11,11];anchor=[5,5];
-  }
-  const icon=L.divIcon({html:iconHtml,iconSize:size,iconAnchor:anchor,className:''});
-  const marker=L.marker([wp.lat,wp.lon],{icon,zIndexOffset:isFinish?300:(isSpecial?200:(isWhite?100:0))});
+  const { icon, zIndexOffset, tooltipOffset } = makeWpIcon(wp);
+  const marker=L.marker([wp.lat,wp.lon],{icon,zIndexOffset});
   const html = buildWpHtml(wp, i);
   marker.bindPopup(html,{maxWidth:500});
 
-  marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
+  marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:tooltipOffset,opacity:0.97});
   marker.addTo(map); _dynLayers.push(marker); _wpMarkers.set(i, marker);
 });
 }
