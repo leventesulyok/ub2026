@@ -36,7 +36,20 @@ function getSheet_() {
     sh.appendRow(HEADERS);
     sh.setFrozenRows(1);
   }
+  // A time oszlop (B) plain text, hogy a sheet ne konvertálja Date-té.
+  sh.getRange('B:B').setNumberFormat('@');
   return sh;
+}
+
+function toHHMM_(v) {
+  if (v === '' || v === null || v === undefined) return '';
+  if (v instanceof Date) {
+    return Utilities.formatDate(v, Session.getScriptTimeZone(), 'HH:mm');
+  }
+  const s = String(v).trim();
+  const m = s.match(/^(\d{1,2}):(\d{2})/);
+  if (m) return m[1].padStart(2,'0') + ':' + m[2];
+  return s;
 }
 
 function doGet(e) {
@@ -46,15 +59,15 @@ function doGet(e) {
     const map = {};
     for (let i = 1; i < values.length; i++) {
       const wp = String(values[i][0] || '').trim();
-      const time = values[i][1];
+      const time = toHHMM_(values[i][1]);
       const runner = String(values[i][2] || '').trim();
       const ts = values[i][3];
       if (!wp) continue;
-      if (time === '' || time === null || time === undefined) {
+      if (!time) {
         delete map[wp];
       } else {
         map[wp] = {
-          time: String(time),
+          time: time,
           runner: runner,
           ts: (ts instanceof Date) ? ts.toISOString() : String(ts || '')
         };
