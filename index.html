@@ -246,8 +246,17 @@ const _origSpecial = new Set(W.filter(wp=>wp.special).map(wp=>wp.name+'|'+(wp.fi
 // DYNAMIC DATA LOADER – percenként CSV, időjárás 30 percenként
 // ═══════════════════════════════════════════════════════════════════════════════
 
-const CSV_UB25   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-AHvRK-jE8ecZK8u6hoarh9vJLhFCkghR9We8M4rsaVgN8_BgeENW0YzfgaBBPA/pub?gid=1064917461&single=true&output=csv';
-const CSV_VALTAS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQ-AHvRK-jE8ecZK8u6hoarh9vJLhFCkghR9We8M4rsaVgN8_BgeENW0YzfgaBBPA/pub?gid=1784165817&single=true&output=csv';
+const CSV_UB26   = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQv10TYmwM-PMZ1AF2ri138kH62XHNRFjJPSBiGMJO8XjhKsk6qm26qOkCdgNWHuPK_jA5eNtFuW0qn/pub?gid=0&single=true&output=csv';
+const CSV_VALTAS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQv10TYmwM-PMZ1AF2ri138kH62XHNRFjJPSBiGMJO8XjhKsk6qm26qOkCdgNWHuPK_jA5eNtFuW0qn/pub?gid=2145905594&single=true&output=csv';
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHECK-IN (Apps Script Web App) – fázis 1+2: multi-device szinkron
+// ═══════════════════════════════════════════════════════════════════════════════
+const CHECKIN_URL = 'https://script.google.com/macros/s/AKfycbxv-flSewelbJzEUeblLj-4wwkkR6JMWccDtK5SMuXtUJMPcdxiNG4lYz8CAQgbPSEe/exec'; // TODO: illeszd be ide a gas-checkins.js deploy után kapott URL-t
+const CHECKINS = {}; // { waypoint: { time:"HH:MM", runner:"Név", ts:"ISO" } }
+const LS_KEY_CHECKINS = 'ub26_checkins';
+const LS_KEY_RUNNER   = 'ub26_active_runner';
+let ACTIVE_RUNNER = localStorage.getItem(LS_KEY_RUNNER) || '';
 
 const RG = {};
 let _dynLayers = [];
@@ -356,7 +365,7 @@ function getWeather(lat, arrStr) {
   return {temp, icon, desc, phase: isNight ? 'night' : 'day', wind, windDir: windDirStr};
 }
 
-function applyUB25(rows) {
+function applyUB26(rows) {
   const M = {};
   for (const r of rows) {
     const n = (r[5]||'').trim();
@@ -612,13 +621,13 @@ function segKm(seg) {
 // ═══════════════════════════════════════════════════════════════════════════════
 // OFFLINE CACHE (localStorage)
 // ═══════════════════════════════════════════════════════════════════════════════
-const LS_KEY_UB25   = 'ub26_csv_ub25';
+const LS_KEY_UB26   = 'ub26_csv_ub26';
 const LS_KEY_VALTAS = 'ub26_csv_valtas';
 const LS_KEY_TS     = 'ub26_csv_ts';
 
 function saveToCache(t1, t2) {
   try {
-    localStorage.setItem(LS_KEY_UB25,   t1);
+    localStorage.setItem(LS_KEY_UB26,   t1);
     localStorage.setItem(LS_KEY_VALTAS, t2);
     localStorage.setItem(LS_KEY_TS,     Date.now().toString());
   } catch(e) { console.warn('localStorage write error:', e); }
@@ -626,13 +635,212 @@ function saveToCache(t1, t2) {
 
 function loadFromCache() {
   try {
-    const t1 = localStorage.getItem(LS_KEY_UB25);
+    const t1 = localStorage.getItem(LS_KEY_UB26);
     const t2 = localStorage.getItem(LS_KEY_VALTAS);
     const ts = localStorage.getItem(LS_KEY_TS);
     if (!t1 || !t2) return null;
     return { t1, t2, ts: ts ? new Date(parseInt(ts)) : null };
   } catch(e) { return null; }
 }
+
+// ═══════════════════════════════════════════════════════════════════════════════
+// CHECK-IN helperek + delta propagáció
+// ═══════════════════════════════════════════════════════════════════════════════
+function hhmmToMin(s) {
+  if (!s || !s.includes(':')) return null;
+  const [h, m] = s.split(':').map(Number);
+  if (isNaN(h) || isNaN(m)) return null;
+  return h*60 + m;
+}
+function minToHhmm(mins) {
+  mins = ((mins % 1440) + 1440) % 1440;
+  return String(Math.floor(mins/60)).padStart(2,'0') + ':' + String(mins%60).padStart(2,'0');
+}
+function deltaMinSigned(planned, actual) {
+  const p = hhmmToMin(planned), a = hhmmToMin(actual);
+  if (p === null || a === null) return 0;
+  let d = a - p;
+  if (d < -720) d += 1440;
+  if (d >  720) d -= 1440;
+  return d;
+}
+function fmtDeltaMin(d) {
+  if (d === 0) return '±0p';
+  const sign = d > 0 ? '+' : '−';
+  const a = Math.abs(d);
+  if (a < 60) return sign + a + 'p';
+  const h = Math.floor(a/60), m = a%60;
+  return sign + h + 'ó' + (m ? ' '+m+'p' : '');
+}
+
+function saveCheckinsCache() {
+  try { localStorage.setItem(LS_KEY_CHECKINS, JSON.stringify(CHECKINS)); } catch(e){}
+}
+function loadCheckinsCache() {
+  try {
+    const raw = localStorage.getItem(LS_KEY_CHECKINS);
+    if (!raw) return;
+    const obj = JSON.parse(raw);
+    Object.keys(obj).forEach(k => { CHECKINS[k] = obj[k]; });
+  } catch(e){}
+}
+
+async function fetchCheckins() {
+  if (!CHECKIN_URL) return;
+  try {
+    const r = await fetch(CHECKIN_URL + '?_t=' + Date.now());
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const data = await r.json();
+    if (data && typeof data === 'object' && !data.error) {
+      Object.keys(CHECKINS).forEach(k => delete CHECKINS[k]);
+      Object.keys(data).forEach(k => { CHECKINS[k] = data[k]; });
+      saveCheckinsCache();
+    }
+  } catch(e) { console.warn('Checkin fetch (non-fatal):', e); }
+}
+
+async function postCheckin(waypoint, time, runner) {
+  if (!CHECKIN_URL) { alert('Check-in URL nincs beállítva (index.html: CHECKIN_URL).'); return false; }
+  try {
+    const r = await fetch(CHECKIN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ waypoint, time, runner })
+    });
+    if (!r.ok) throw new Error('HTTP '+r.status);
+    const j = await r.json();
+    if (!j.ok) throw new Error(j.error || 'ismeretlen hiba');
+    return true;
+  } catch(e) { alert('Check-in hiba: ' + e.message); return false; }
+}
+
+function applyCheckins() {
+  // Forward-propagálás: d_m = C_m - P_m ha van check-in, különben d_{m-1}.
+  // Forrás: wp._plannedArrival (ha van), különben wp.arrival (friss applyUB26 után).
+  let delta = 0;
+  W.forEach(wp => {
+    const planned = wp._plannedArrival || wp.arrival || '';
+    wp._plannedArrival = planned;
+    const ci = CHECKINS[wp.name];
+    if (ci && ci.time && planned) {
+      delta = deltaMinSigned(planned, ci.time);
+      wp._effDelta = delta;
+      wp._checkedIn = true;
+      wp._checkinRunner = ci.runner || '';
+      wp.arrival = ci.time;
+    } else {
+      wp._effDelta = delta;
+      wp._checkedIn = false;
+      wp._checkinRunner = '';
+      wp.arrival = planned && delta !== 0 ? minToHhmm(hhmmToMin(planned) + delta) : planned;
+    }
+  });
+  // Szegmensek időit is propagáljuk a mentett tervezett értékekről.
+  S.forEach(seg => {
+    const pf = seg._plannedTimeFrom || seg.time_from;
+    const pt = seg._plannedTimeTo   || seg.time_to;
+    seg._plannedTimeFrom = pf;
+    seg._plannedTimeTo   = pt;
+    const fromWp = W.find(w => w.name === seg.from);
+    const toWp   = W.find(w => w.name === seg.to);
+    const d_from = fromWp ? (fromWp._effDelta || 0) : 0;
+    const d_to   = toWp   ? (toWp._effDelta   || 0) : 0;
+    seg.time_from = pf && d_from ? minToHhmm(hhmmToMin(pf) + d_from) : pf;
+    seg.time_to   = pt && d_to   ? minToHhmm(hhmmToMin(pt) + d_to)   : pt;
+  });
+}
+
+async function checkinAt(wpName) {
+  if (!ACTIVE_RUNNER) { alert('Előbb válaszd ki a neved a fejlécben! (🙋 gomb)'); return; }
+  const now = new Date();
+  const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  const prev = CHECKINS[wpName];
+  CHECKINS[wpName] = { time, runner: ACTIVE_RUNNER, ts: now.toISOString() };
+  saveCheckinsCache();
+  applyCheckins();
+  refreshUIAfterCheckin();
+  const ok = await postCheckin(wpName, time, ACTIVE_RUNNER);
+  if (!ok) {
+    if (prev) CHECKINS[wpName] = prev; else delete CHECKINS[wpName];
+    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin();
+  }
+}
+
+async function revokeCheckin(wpName) {
+  const prev = CHECKINS[wpName];
+  if (!prev) return;
+  delete CHECKINS[wpName];
+  saveCheckinsCache();
+  applyCheckins();
+  refreshUIAfterCheckin();
+  const ok = await postCheckin(wpName, '', ACTIVE_RUNNER || prev.runner || '');
+  if (!ok) {
+    CHECKINS[wpName] = prev;
+    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin();
+  }
+}
+
+function refreshUIAfterCheckin() {
+  if (_mapBuilt) updateMapData();
+  updateHeaderProgress();
+  updateHeaderDelta();
+  updateNowRunning();
+}
+
+function setActiveRunner(name) {
+  ACTIVE_RUNNER = name || '';
+  try { localStorage.setItem(LS_KEY_RUNNER, ACTIVE_RUNNER); } catch(e){}
+  const lbl = document.getElementById('runnerPickerLabel');
+  if (lbl) {
+    if (ACTIVE_RUNNER) {
+      const col = C[ACTIVE_RUNNER] || '#aaa';
+      lbl.innerHTML = '<span class="pw-dot" style="background:'+col+'"></span>'+ACTIVE_RUNNER;
+    } else {
+      lbl.innerHTML = '🙋 Név…';
+    }
+  }
+}
+
+function openRunnerPicker() {
+  const existing = document.getElementById('runnerPickerModal');
+  if (existing) { existing.remove(); return; }
+  const runners = Object.keys(C);
+  let html = '<div id="runnerPickerModal" onclick="if(event.target===this)this.remove()" style="position:fixed;inset:0;z-index:19999;background:rgba(0,0,0,.65);display:flex;align-items:center;justify-content:center">'
+    + '<div style="background:#12122a;border:1px solid #2a2a50;border-radius:12px;padding:18px 22px;min-width:260px;max-width:92vw">'
+    + '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px"><span style="font-weight:700;font-size:14px;color:#e0e0ff">Ki vagy?</span>'
+    + '<span onclick="document.getElementById(\'runnerPickerModal\').remove()" style="cursor:pointer;color:#7777aa;font-size:18px;padding:0 4px">✕</span></div>'
+    + '<div style="display:flex;flex-direction:column;gap:6px">';
+  runners.forEach(r => {
+    const col = C[r];
+    const sel = r === ACTIVE_RUNNER ? 'background:rgba(255,255,255,.14);' : '';
+    html += '<div onclick="setActiveRunner(\''+r+'\');document.getElementById(\'runnerPickerModal\').remove()" '
+      + 'style="cursor:pointer;display:flex;align-items:center;gap:9px;padding:8px 10px;border-radius:8px;border:1px solid rgba(255,255,255,.08);'+sel+'">'
+      + '<span class="pw-dot" style="background:'+col+';width:10px;height:10px"></span>'
+      + '<span style="color:'+col+';font-weight:600">'+r+'</span></div>';
+  });
+  html += '<div onclick="setActiveRunner(\'\');document.getElementById(\'runnerPickerModal\').remove()" '
+    + 'style="cursor:pointer;padding:6px 10px;margin-top:5px;font-size:11px;color:#8888aa;text-align:center;border-top:1px solid rgba(255,255,255,.08)">Törlés</div>';
+  html += '</div></div></div>';
+  document.body.insertAdjacentHTML('beforeend', html);
+}
+
+function updateHeaderDelta() {
+  const el = document.getElementById('headerDelta');
+  if (!el) return;
+  const nowMs = Date.now();
+  let delta = 0, found = false;
+  W.forEach(wp => {
+    if (!wp._plannedArrival) return;
+    const t = parseRaceTime(wp._plannedArrival);
+    if (t && t.getTime() <= nowMs) { delta = wp._effDelta || 0; found = true; }
+  });
+  if (!found) { el.style.display = 'none'; return; }
+  el.style.display = 'inline-flex';
+  if (delta === 0) { el.textContent = '⏱️ terv szerint'; el.style.color = '#88aacc'; el.style.borderColor = 'rgba(136,170,204,.4)'; }
+  else if (delta > 0) { el.textContent = '⏱️ csúszás '+fmtDeltaMin(delta); el.style.color = '#ffaa66'; el.style.borderColor = 'rgba(255,170,102,.5)'; }
+  else { el.textContent = '✓ előny '+fmtDeltaMin(-delta); el.style.color = '#88ffbb'; el.style.borderColor = 'rgba(136,255,187,.5)'; }
+}
+setInterval(updateHeaderDelta, 15000);
 
 // ── Statisztika modal ──
 function buildStatsModal() {
@@ -805,8 +1013,28 @@ function buildWpHtml(wp, i) {
   const isWhite=wp.is_relay_white;
   const isFinish=wp.finish;
   const nightTag=isNight?' &#x1F319;':' &#x2600;&#xFE0F;';
-  const arrBadge=wp.arrival?`<span class="pw-arrival"><span class="pw-arrival-label">Várható érkezés</span><span class="pw-arrival-time">&#x23F0; ${wp.arrival}</span></span>`:'';
+  let arrBadge = '';
+  if (wp.arrival) {
+    const delta = wp._effDelta || 0;
+    const planned = wp._plannedArrival || wp.arrival;
+    const showPlanned = delta !== 0 && planned && planned !== wp.arrival;
+    const deltaStr = delta !== 0 ? ` <span style="font-size:10px;color:${delta>0?'#ff9977':'#88ffbb'}">${fmtDeltaMin(delta)}</span>` : '';
+    const plannedStr = showPlanned ? `<span style="font-size:9px;color:#888">eredeti: ${planned}</span>` : '';
+    const icon = wp._checkedIn ? '✓' : '&#x23F0;';
+    const timeColor = wp._checkedIn ? '#88ffbb' : '#ffcc55';
+    const lbl = wp._checkedIn ? 'Érkezett' : 'Várható érkezés';
+    arrBadge = `<span class="pw-arrival"><span class="pw-arrival-label">${lbl}</span><span class="pw-arrival-time" style="color:${timeColor}">${icon} ${wp.arrival}${deltaStr}</span>${plannedStr}</span>`;
+  }
   let html=`<div class="pw-title"><span>${wp.name}${nightTag}</span>${arrBadge}</div>`;
+  if (i > 0) {
+    const wpEsc = wp.name.replace(/'/g, "\\'");
+    if (wp._checkedIn) {
+      const who = wp._checkinRunner ? ' ('+wp._checkinRunner+')' : '';
+      html += `<div style="margin:4px 0"><button onclick="revokeCheckin('${wpEsc}')" style="width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(136,255,187,.4);background:rgba(136,255,187,.14);color:#88ffbb;font-size:12px;font-weight:600;cursor:pointer">↺ Visszavonás ${wp.arrival}${who}</button></div>`;
+    } else {
+      html += `<div style="margin:4px 0"><button onclick="checkinAt('${wpEsc}')" style="width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(136,204,255,.4);background:rgba(136,204,255,.14);color:#88ccff;font-size:12px;font-weight:600;cursor:pointer">✓ Érkezett most</button></div>`;
+    }
+  }
   const waze=`https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes`;
   const navIcons=`<div class="pw-nav-inline"><div class="pw-navbtn" title="Google Maps" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="22" height="22" style="object-fit:contain;border-radius:3px"></div><div class="pw-navbtn" title="Waze" onclick="window.open('${waze}','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="22" height="22" style="object-fit:contain;border-radius:3px"></div></div>`;
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather-nav-row"><div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C${w.wind!=null?` <span class="pw-wind">💨 ${w.wind} km/h ${w.windDir}</span>`:""}</div><div class="pw-weather-desc">${w.desc}</div></div></div>${navIcons}</div>`;} else { html+=`<div class="pw-weather-nav-row" style="justify-content:flex-end">${navIcons}</div>`; }
@@ -897,7 +1125,7 @@ async function fetchAndRender() {
   let t1, t2;
   try {
     [t1, t2] = await Promise.all([
-      fetch(CSV_UB25   + '&_t=' + Date.now()).then(r => { if(!r.ok) throw new Error('UB25 HTTP '+r.status); return r.text(); }),
+      fetch(CSV_UB26   + '&_t=' + Date.now()).then(r => { if(!r.ok) throw new Error('UB26 HTTP '+r.status); return r.text(); }),
       fetch(CSV_VALTAS + '&_t=' + Date.now()).then(r => { if(!r.ok) throw new Error('Váltás HTTP '+r.status); return r.text(); })
     ]);
     saveToCache(t1, t2);
@@ -914,11 +1142,16 @@ async function fetchAndRender() {
     }
   }
   try {
-    applyUB25(parseCSV(t1));
-  } catch(e) { console.error('applyUB25:', e); setStatus(false, 'applyUB25: '+e.message); return; }
+    applyUB26(parseCSV(t1));
+  } catch(e) { console.error('applyUB26:', e); setStatus(false, 'applyUB26: '+e.message); return; }
   try {
     applyValtas(parseCSV(t2));
   } catch(e) { console.error('applyValtas:', e); setStatus(false, 'applyValtas: '+e.message); return; }
+  // Mentett tervezett értékek törlése, hogy a friss CSV adatok érvényesüljenek applyCheckins-ben.
+  W.forEach(wp => { delete wp._plannedArrival; });
+  S.forEach(seg => { delete seg._plannedTimeFrom; delete seg._plannedTimeTo; });
+  try { await fetchCheckins(); } catch(e) { console.warn('Checkins (non-fatal):', e); }
+  try { applyCheckins(); } catch(e) { console.error('applyCheckins:', e); }
   try { await fetchWeather(); } catch(e) { console.warn('Weather (non-fatal):', e); }
   W.forEach(wp => { try { const w = getWeather(wp.lat, wp.arrival); if (w) wp.weather = w; } catch(e) {} });
   try {
@@ -930,6 +1163,7 @@ async function fetchAndRender() {
     }
     updateNowRunning();
     updateHeaderProgress();
+    updateHeaderDelta();
   } catch(e) { console.error('buildMap:', e); setStatus(false, 'buildMap: '+e.message); return; }
   const _t = new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'});
   setStatus(true, 'OK');
@@ -971,6 +1205,20 @@ Object.entries(C).forEach(([runner, color]) => {
   progWrap.innerHTML = '<div id="headerProgBar" style="width:80px;height:5px;background:rgba(255,255,255,0.1);border-radius:3px;overflow:hidden"><div id="headerProgFill" style="height:100%;width:0%;background:linear-gradient(90deg,#4488ff,#44ddaa);border-radius:3px;transition:width .5s"></div></div><span id="headerProgTxt">–</span>';
   ctrlEl.insertBefore(progWrap, sep);
 
+  const deltaEl = document.createElement('span');
+  deltaEl.id = 'headerDelta';
+  deltaEl.title = 'Csapat aktuális csúszása (legutóbbi érintett pont alapján)';
+  deltaEl.style.cssText = 'display:none;align-items:center;padding:3px 9px;border-radius:14px;border:1px solid rgba(136,170,204,.4);background:rgba(255,255,255,.04);font-size:11px;font-weight:600;white-space:nowrap';
+  ctrlEl.insertBefore(deltaEl, sep);
+
+  const runnerBtn = document.createElement('button');
+  runnerBtn.id = 'runnerPicker'; runnerBtn.title = 'Ki vagy? (check-inhez kell)';
+  runnerBtn.className = 'btn';
+  runnerBtn.style.cssText = 'padding:4px 11px;font-size:11px';
+  runnerBtn.innerHTML = '<span id="runnerPickerLabel">🙋 Név…</span>';
+  runnerBtn.onclick = openRunnerPicker;
+  ctrlEl.appendChild(runnerBtn);
+
   const gpsBtn = document.createElement('button');
   gpsBtn.id = 'gpsBtn'; gpsBtn.title = 'GPS követés bekapcsolása';
   gpsBtn.innerHTML = '📍 GPS';
@@ -994,10 +1242,13 @@ Object.entries(C).forEach(([runner, color]) => {
   ctrlEl.appendChild(lastUpdEl);
 })();
 
+loadCheckinsCache();
+setActiveRunner(ACTIVE_RUNNER);
 buildMap();
 updateActiveSegments();
 updateNowRunning();
 updateHeaderProgress();
+updateHeaderDelta();
 fetchAndRender();
 setInterval(fetchAndRender, 15000);
 
