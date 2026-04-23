@@ -508,6 +508,17 @@ function toggleGPS() {
 
 function startGPS() {
   if (!navigator.geolocation) { alert('GPS nem elérhető ezen az eszközön.'); return; }
+  // Trigger permission dialog explicitly first
+  navigator.geolocation.getCurrentPosition(
+    () => { console.log('GPS engedély megadva'); },
+    err => { 
+      setStatus(false, 'GPS hiba: ' + (err.code===1?'Engedély megtagadva':err.code===2?'Helymeghatározás nem elérhető':'Timeout'));
+      _gpsActive = false;
+      const btn = document.getElementById('gpsBtn');
+      if(btn) btn.classList.remove('gps-on');
+    },
+    {enableHighAccuracy:true, timeout:10000}
+  );
   _gpsActive = true;
   _gpsWatchId = navigator.geolocation.watchPosition(pos => {
     const lat = pos.coords.latitude, lon = pos.coords.longitude;
@@ -760,18 +771,14 @@ let _activePolylines = new Map();
 const _wpMarkers = new Map(); // index -> marker
 
 function getActiveSegments() {
-  const now = new Date();
-  const nowMins = now.getHours() * 60 + now.getMinutes();
+  const nowMs = Date.now();
+  const rd = '2026-04-25';
+  const parseAbs = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(rd+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
   return S.reduce((acc, seg, i) => {
-    const parseT = t => { if (!t) return null; const [h,m] = t.split(':').map(Number); return h*60+m; };
-    let from = parseT(seg.time_from), to = parseT(seg.time_to);
-    if (from === null && to !== null) from = to - 60;
-    if (to === null && from !== null) to = from + 60;
-    if (from !== null && to !== null) {
-      let adj = nowMins;
-      if (from > 12*60 && adj < 6*60) adj += 24*60;
-      if (adj >= from && adj <= to) acc.push(i);
-    }
+    let from = parseAbs(seg.time_from), to = parseAbs(seg.time_to);
+    if (from === null && to !== null) from = to - 60*60*1000;
+    if (to === null && from !== null) to = from + 60*60*1000;
+    if (from !== null && to !== null && nowMs >= from && nowMs <= to) acc.push(i);
     return acc;
   }, []);
 }
@@ -796,16 +803,10 @@ function updateHeaderProgress() {
   const txt  = document.getElementById('headerProgTxt');
   if (!fill || !txt) return;
   const totalKm = S.reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
-  const nowMinsP = (new Date()).getHours()*60+(new Date()).getMinutes();
-  const parseTP = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return h*60+m; };
-  const doneKm  = S.filter(s=>{ 
-    let t=parseTP(s.time_to); 
-    if(t===null) return false;
-    if(t < 12*60) t += 24*60; // midnight crossing: times like 02:42 -> 26:42
-    let adjNow = nowMinsP;
-    if(adjNow < 12*60) adjNow += 24*60;
-    return t <= adjNow; 
-  }).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
+  const _raceDate = '2026-04-25';
+  const _nowMs = Date.now();
+  const parseAbsTP = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(_raceDate+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
+  const doneKm  = S.filter(s=>{ const t=parseAbsTP(s.time_to); return t!==null && t<=_nowMs; }).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
   const pct = totalKm>0 ? Math.min(100,(doneKm/totalKm*100)) : 0;
   fill.style.width = pct.toFixed(1)+'%';
   const lastSeg = [...S].reverse().find(s=>s.time_to);
