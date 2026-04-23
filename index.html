@@ -662,25 +662,22 @@ function buildStatsModal() {
 }
 
 function paceChips(km, runnerPace) {
-  // runnerPace = "MM:SS" string e.g. "5:40"
-  const paces = [5, 5.5, 6, 6.5, 7, 7.5];
-  // Parse runner's pace to decimal minutes
-  let runnerP = null;
-  if (runnerPace) {
-    const [pm, ps] = runnerPace.split(':').map(Number);
-    runnerP = pm + ps / 60;
-  }
-  return paces.map(p => {
-    const mins = Math.round(parseFloat(km) * p);
-    const h = Math.floor(mins / 60), m = mins % 60;
-    const t = h > 0 ? h + 'ó ' + m + 'p' : m + 'p';
-    const ps = Math.floor(p) + ':' + (p % 1 === 0 ? '00' : '30');
-    const isOwn = runnerP !== null && Math.abs(p - runnerP) < 0.26;
+  const toSec = p => { const [m,s]=(p||'6:00').split(':').map(Number); return m*60+s; };
+  const toStr = sec => Math.floor(sec/60)+':'+(sec%60<10?'0':'')+sec%60;
+  const own = toSec(runnerPace || '6:00');
+  const step = 30; // 30 sec/km step
+  const paces = runnerPace
+    ? [own - step, own, own + step]
+    : [own - step, own, own + step];
+  return paces.map(sec => {
+    const mins = Math.round(parseFloat(km) * sec / 60);
+    const h = Math.floor(mins/60), m = mins%60;
+    const t = h>0 ? h+'ó '+m+'p' : m+'p';
+    const isOwn = sec === own && runnerPace;
     const style = isOwn
       ? 'background:rgba(100,200,120,0.25);color:#aaffbb;border-color:rgba(100,200,120,0.5);font-weight:700'
       : '';
-    return '<span class="pw-pace-chip"' + (style ? ' style="' + style + '"' : '') + '>'
-      + ps + '/km → ' + t + '</span>';
+    return '<span class="pw-pace-chip"'+(style?' style="'+style+'"':'')+'>'+toStr(sec)+'/km → '+t+'</span>';
   }).join(' ');
 }
 
@@ -792,12 +789,16 @@ W.forEach((wp,i)=>{
   }
   const arrs=wp.arrivals||[];
   if(arrs.length){html+='<div class="pw-section-label">&#x2193; Érkező szakasz</div>';arrs.forEach(a=>{const col=C[a.runner]||'#aaa';const sp=a.sponsor?`<div class="pw-seg-sponsor">&#x1F4CB; ${a.sponsor}</div>`:'';const aDist=S.find(s=>s.from===a.from&&s.to===wp.name);
-      const aDistStr=aDist?(' · 📏 '+segDistKm(aDist.coords).toFixed(1)+'km ⬆️'+(aDist.dplus||0)+'m'):'';
-      html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body"><div class="pw-seg-runner" style="color:${col}">🏃 ${a.runner}${a.time?' <span style=\"color:#7777aa;font-size:10px\">'+a.time+'</span>':''}</div><div class="pw-seg-route">${a.from} → ${wp.name}${aDistStr}</div>${sp}</div>${AT[i]&&AT[i].a?`<div class="pw-seg-atbtn" onclick="window.open('${AT[i].a}','_blank')" title="AllTrails útvonal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18"><circle cx="50" cy="50" r="50" fill="#3D7A3D"/><polygon points="50,15 20,75 80,75" fill="white"/><polygon points="72,40 52,75 92,75" fill="white" opacity="0.7"/></svg></div>`:''}</div>`;});}
+      const aKm=aDist?(parseFloat(aDist.km)||segDistKm(aDist.coords)):0;
+      const aDistStr=aDist?' · 📏 '+parseFloat(aKm).toFixed(1)+'km ⬆️'+(aDist.dplus||0)+'m':'';
+      const aPaceRow=aDist?'<div class="pw-pace-row" style="margin-top:4px">'+paceChips(aKm,aDist.pace)+'</div>':'';
+html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body"><div class="pw-seg-runner" style="color:${col}">🏃 ${a.runner}${a.time?' <span style=\"color:#7777aa;font-size:10px\">'+a.time+'</span>':''}</div><div class="pw-seg-route">${a.from} → ${wp.name}${aDistStr}</div>${aPaceRow}${sp}</div>${AT[i]&&AT[i].a?`<div class="pw-seg-atbtn" onclick="window.open('${AT[i].a}','_blank')" title="AllTrails útvonal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18"><circle cx="50" cy="50" r="50" fill="#3D7A3D"/><polygon points="50,15 20,75 80,75" fill="white"/><polygon points="72,40 52,75 92,75" fill="white" opacity="0.7"/></svg></div>`:''}</div>`;});}
   const deps=wp.departures||[];
   if(deps.length){html+='<div class="pw-section-label">&#x2191; Induló szakasz</div>';deps.forEach(d=>{const col=C[d.runner]||'#aaa';const sp=d.sponsor?`<div class="pw-seg-sponsor">&#x1F4CB; ${d.sponsor}</div>`:'';const dDist=S.find(s=>s.from===wp.name&&s.to===d.to);
-      const dDistStr=dDist?(' · 📏 '+segDistKm(dDist.coords).toFixed(1)+'km ⬆️'+(dDist.dplus||0)+'m'):'';
-      html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body"><div class="pw-seg-runner" style="color:${col}">🏃 ${d.runner}</div><div class="pw-seg-route">${wp.name} → ${d.to}${dDistStr}</div>${sp}</div>${AT[i]&&AT[i].d?`<div class="pw-seg-atbtn" onclick="window.open('${AT[i].d}','_blank')" title="AllTrails útvonal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18"><circle cx="50" cy="50" r="50" fill="#3D7A3D"/><polygon points="50,15 20,75 80,75" fill="white"/><polygon points="72,40 52,75 92,75" fill="white" opacity="0.7"/></svg></div>`:''}</div>`;});}
+      const dKm=dDist?(parseFloat(dDist.km)||segDistKm(dDist.coords)):0;
+      const dDistStr=dDist?' · 📏 '+parseFloat(dKm).toFixed(1)+'km ⬆️'+(dDist.dplus||0)+'m':'';
+      const dPaceRow=dDist?'<div class="pw-pace-row" style="margin-top:4px">'+paceChips(dKm,dDist.pace)+'</div>':'';
+html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body"><div class="pw-seg-runner" style="color:${col}">🏃 ${d.runner}</div><div class="pw-seg-route">${wp.name} → ${d.to}${dDistStr}</div>${dPaceRow}${sp}</div>${AT[i]&&AT[i].d?`<div class="pw-seg-atbtn" onclick="window.open('${AT[i].d}','_blank')" title="AllTrails útvonal"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="18" height="18"><circle cx="50" cy="50" r="50" fill="#3D7A3D"/><polygon points="50,15 20,75 80,75" fill="white"/><polygon points="72,40 52,75 92,75" fill="white" opacity="0.7"/></svg></div>`:''}</div>`;});}
   html+=`<div class="pw-coord">${wp.lat.toFixed(6)}, ${wp.lon.toFixed(6)}</div>`; 
   marker.bindPopup(html,{maxWidth:380});
   marker.bindTooltip(wp.arrival?`${wp.name} · ${wp.arrival}`:wp.name,{direction:'top',offset:[0,isSpecial||isFinish?-9:(isWhite?-7:-5)],opacity:0.97});
