@@ -584,20 +584,18 @@ function formatCountdown(ms) {
   return m + 'p ' + String(s).padStart(2,'0') + 'mp';
 }
 
-function getCountdown(hhmm) {
-  const target = parseRaceTime(hhmm);
-  if (!target) return null;
-  const now = new Date();
-  const ms = target - now;
-  if (ms < 0) return null;  // already passed
+function getCountdown(timeStr) {
+  if (!timeStr) return null;
+  const target = /T/.test(timeStr) ? new Date(timeStr) : parseRaceTime(timeStr);
+  if (!target || isNaN(target.getTime())) return null;
+  const ms = target.getTime() - Date.now();
+  if (ms < 0) return null;
   return formatCountdown(ms);
 }
 
-// Update all open countdown displays
 function updateCountdowns() {
   document.querySelectorAll('[data-countdown]').forEach(el => {
-    const hhmm = el.dataset.countdown;
-    const cd = getCountdown(hhmm);
+    const cd = getCountdown(el.dataset.countdown);
     el.textContent = cd ? '⏳ ' + cd : '✓';
     el.style.color = cd ? '#ffcc44' : '#55ee88';
   });
@@ -1088,11 +1086,14 @@ function buildWpHtml(wp, i) {
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather-nav-row"><div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C${w.wind!=null?` <span class="pw-wind">💨 ${w.wind} km/h ${w.windDir}</span>`:""}</div><div class="pw-weather-desc">${w.desc}</div></div></div>${navIcons}</div>`;} else { html+=`<div class="pw-weather-nav-row" style="justify-content:flex-end">${navIcons}</div>`; }
   if(isSpecial&&wp.relay){
     const r=wp.relay; const _rtDelta=wp._effDelta||0;
-    const adjRelayTime=wp.relay_time&&_rtDelta?minToHhmm(hhmmToMin(wp.relay_time)+_rtDelta):wp.relay_time;
-    const cdStr=adjRelayTime?getCountdown(adjRelayTime):'';
+    const _rtBase=wp.relay_time?parseRaceTime(wp.relay_time):null;
+    const _rtAdj=_rtBase?new Date(_rtBase.getTime()+_rtDelta*60000):_rtBase;
+    const adjRelayIso=_rtAdj?_rtAdj.toISOString():'';
+    const adjRelayHHMM=_rtAdj?fmtHHMM(_rtAdj):(wp.relay_time||'');
+    const cdStr=adjRelayIso?getCountdown(adjRelayIso):'';
     const _rtColor=_rtDelta>0?'#ff9977':'#88ffbb';
-    const relayTimeDisplay=wp.relay_time&&_rtDelta?`<span style="text-decoration:line-through;opacity:.5;font-size:10px">${wp.relay_time}</span> <span style="color:${_rtColor}">${adjRelayTime}</span>`:(wp.relay_time||'');
-    html+=`<div class="pw-relay-box"><div class="pw-relay-title"><span>&#x1F501; Váltási rend${relayTimeDisplay?' · '+relayTimeDisplay:''}</span>${cdStr?`<div class="pw-relay-cd"><div class="pw-relay-cd-label">Váltásig</div><div class="pw-relay-cd-val" data-countdown="${adjRelayTime}">⏳ ${cdStr}</div></div>`:''}</div>`;
+    const relayTimeDisplay=wp.relay_time&&_rtDelta?`<span style="text-decoration:line-through;opacity:.5;font-size:10px">${wp.relay_time}</span> <span style="color:${_rtColor}">${adjRelayHHMM}</span>`:(wp.relay_time||'');
+    html+=`<div class="pw-relay-box"><div class="pw-relay-title"><span>&#x1F501; Váltási rend${relayTimeDisplay?' · '+relayTimeDisplay:''}</span>${cdStr?`<div class="pw-relay-cd"><div class="pw-relay-cd-label">Váltásig</div><div class="pw-relay-cd-val" data-countdown="${adjRelayIso}">⏳ ${cdStr}</div></div>`:''}</div>`;
     if(r.futak&&r.futak[0]!=='-') html+=`<div class="pw-relay-people"><div class="pw-relay-unit"><span class="pw-relay-label">Fut</span><div class="pw-relay-chips">${chip(r.futak[0])} ${chip(r.futak[1])}</div></div>${r.valtak&&r.valtak[0]!=='-'?`<div class="pw-relay-unit"><span class="pw-relay-label">Vált</span><div class="pw-relay-chips">${chip(r.valtak[0])} ${chip(r.valtak[1])}</div></div>`:''}</div>`;
     if(false) html+='';
     if(false) html+='';
