@@ -828,7 +828,7 @@ function updatePositionMarkers() {
     const opacity = stale ? 0.35 : 1;
     const existing = _posMarkers.get(runner);
     const latlng = [pos.lat, pos.lon];
-    const iconHtml = `<div style="opacity:${opacity};filter:drop-shadow(0 0 4px ${color})"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="${color}"><circle cx="13.5" cy="3.5" r="2"/><path d="M13.49 7.5c-1.1 0-2 .9-2 2 0 .28.06.54.16.78L9.3 11.5l-2.8 1.1v4.4H8v-3l1.8-.7-1.1 5.7H10l.9-4.4 1.6 1.9V22h1.5v-6.5l-1.7-2 .5-2.5c.9 1.1 2.2 1.8 3.7 1.8V11c-1.4 0-2.6-.8-3.2-1.9l-.5-.9c-.1-.2-.3-.4-.5-.5l1.5-.6.9 1h3.3V7.5h-3z"/></svg></div>`;
+    const iconHtml = `<div style="opacity:${opacity};filter:drop-shadow(0 0 4px ${color})"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="${color}"><circle cx="12" cy="5" r="3.5"/><path d="M12 10c-3.5 0-6 1.8-6 4v2h12v-2c0-2.2-2.5-4-6-4z"/></svg></div>`;
     const icon = L.divIcon({ html: iconHtml, iconSize:[22,22], iconAnchor:[11,11], className:'' });
     const ageMin = tsMs ? Math.round((now - tsMs) / 60000) : null;
     const tooltip = runner + (ageMin !== null ? ` · ${ageMin} perce` : '');
