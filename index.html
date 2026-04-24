@@ -202,7 +202,7 @@ const SUN_LAT=46.832139, SUN_LON=17.517992;
 const MOON_LAT=47.076952, MOON_LON=18.084400;
 
 
-const map=L.map('map',{center:[46.87,17.70],zoom:10});
+const map=L.map('map',{center:[46.87,17.70],zoom:10,minZoom:8,maxBounds:[[46.0,16.3],[47.8,19.2]],maxBoundsViscosity:1.0});
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
   attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
   subdomains:'abcd',maxZoom:19
@@ -683,12 +683,10 @@ function fmtHHMM(d) {
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
 // Minuták szerinti signed delta két Date között (planned→actual).
-// Ha |d| > 720 (12h), valószínűleg versenynap előtti teszt check-in → 0.
+// Valódi Date objektumok → nincs wrap szükség, a nyers különbség pontos.
 function deltaMinDates(pd, ad) {
   if (!pd || !ad) return 0;
-  const d = Math.round((ad.getTime() - pd.getTime()) / 60000);
-  if (Math.abs(d) > 720) return 0;
-  return d;
+  return Math.round((ad.getTime() - pd.getTime()) / 60000);
 }
 // Check-in rekord → Date (datetime vagy legacy time fallback-kel)
 function ciToDate(ci) {
@@ -1074,9 +1072,9 @@ function buildWpHtml(wp, i) {
     const wpEsc = wp.name.replace(/'/g, "\\'");
     if (wp._checkedIn) {
       const who = wp._checkinRunner ? ' ('+wp._checkinRunner+')' : '';
-      btnHtml = `<button onclick="revokeCheckin('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,255,187,.4);background:rgba(136,255,187,.14);color:#88ffbb;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">↺ Visszavon ${wp.arrival}${who}</button>`;
+      btnHtml = `<button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,255,187,.4);background:rgba(136,255,187,.14);color:#88ffbb;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">↺ Visszavon ${wp.arrival}${who}</button>`;
     } else {
-      btnHtml = `<button onclick="checkinAt('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,204,255,.4);background:rgba(136,204,255,.14);color:#88ccff;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">✓ Frissítőpontra ért</button>`;
+      btnHtml = `<button onclick="event.stopPropagation();checkinAt('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,204,255,.4);background:rgba(136,204,255,.14);color:#88ccff;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">✓ Frissítőpontra ért</button>`;
     }
   }
   let html=`<div class="pw-title"><span>${wp.name}${nightTag}${btnHtml}</span>${arrBadge}</div>`;
