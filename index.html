@@ -262,11 +262,23 @@ const CSV_VALTAS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQv10TYmwM-P
 // ═══════════════════════════════════════════════════════════════════════════════
 // CHECK-IN (Apps Script Web App) – fázis 1+2: multi-device szinkron
 // ═══════════════════════════════════════════════════════════════════════════════
-const CHECKIN_URL = 'https://script.google.com/macros/s/AKfycbxv-flSewelbJzEUeblLj-4wwkkR6JMWccDtK5SMuXtUJMPcdxiNG4lYz8CAQgbPSEe/exec'; // TODO: illeszd be ide a gas-checkins.js deploy után kapott URL-t
+const CHECKIN_URL = 'https://script.google.com/macros/s/AKfycbxv-flSewelbJzEUeblLj-4wwkkR6JMWccDtK5SMuXtUJMPcdxiNG4lYz8CAQgbPSEe/exec';
 const CHECKINS = {}; // { waypoint: { datetime:"ISO", runner:"Név", ts:"ISO" } }
 const LS_KEY_CHECKINS = 'ub26_checkins';
 const LS_KEY_RUNNER   = 'ub26_active_runner';
 let ACTIVE_RUNNER = localStorage.getItem(LS_KEY_RUNNER) || '';
+let _pendingCheckins = 0; // guard: fetchCheckins nem írja felül amíg POST fut
+
+function showToast(msg, type='error') {
+  const el = document.createElement('div');
+  const bg = type === 'error' ? '#2a1010' : '#102a14';
+  const col = type === 'error' ? '#ff9977' : '#88ffbb';
+  const border = type === 'error' ? 'rgba(255,80,80,.4)' : 'rgba(80,200,100,.4)';
+  el.style.cssText = `position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:${bg};color:${col};border:1px solid ${border};padding:10px 16px;border-radius:8px;font-size:13px;z-index:29999;max-width:90vw;text-align:center;pointer-events:none;transition:opacity .4s`;
+  el.textContent = msg;
+  document.body.appendChild(el);
+  setTimeout(() => { el.style.opacity='0'; setTimeout(() => el.remove(), 400); }, 3600);
+}
 
 const RG = {};
 let _dynLayers = [];
@@ -713,12 +725,12 @@ function loadCheckinsCache() {
 }
 
 async function fetchCheckins() {
-  if (!CHECKIN_URL) return;
+  if (!CHECKIN_URL || _pendingCheckins > 0) return;
   try {
     const r = await fetch(CHECKIN_URL + '?_t=' + Date.now());
     if (!r.ok) throw new Error('HTTP '+r.status);
     const data = await r.json();
-    if (data && typeof data === 'object' && !data.error) {
+    if (data && typeof data === 'object' && !data.error && _pendingCheckins === 0) {
       Object.keys(CHECKINS).forEach(k => delete CHECKINS[k]);
       Object.keys(data).forEach(k => { CHECKINS[k] = data[k]; });
       saveCheckinsCache();
@@ -727,7 +739,7 @@ async function fetchCheckins() {
 }
 
 async function postCheckin(waypoint, datetime, runner) {
-  if (!CHECKIN_URL) { alert('Check-in URL nincs beállítva (index.html: CHECKIN_URL).'); return false; }
+  if (!CHECKIN_URL) { showToast('Check-in URL nincs beállítva.'); return false; }
   try {
     const r = await fetch(CHECKIN_URL, {
       method: 'POST',
@@ -738,7 +750,7 @@ async function postCheckin(waypoint, datetime, runner) {
     const j = await r.json();
     if (!j.ok) throw new Error(j.error || 'ismeretlen hiba');
     return true;
-  } catch(e) { alert('Check-in hiba: ' + e.message); return false; }
+  } catch(e) { showToast('Check-in hiba: ' + e.message); return false; }
 }
 
 function applyCheckins() {
@@ -782,7 +794,7 @@ function applyCheckins() {
 }
 
 async function checkinAt(wpName) {
-  if (!ACTIVE_RUNNER) { alert('Előbb válaszd ki a neved a fejlécben! (🙋 gomb)'); return; }
+  if (!ACTIVE_RUNNER) { showToast('Előbb válaszd ki a neved a fejlécben!', 'error'); return; }
   const now = new Date();
   const iso = now.toISOString();
   const prev = CHECKINS[wpName];
@@ -790,11 +802,14 @@ async function checkinAt(wpName) {
   saveCheckinsCache();
   applyCheckins();
   refreshUIAfterCheckin(wpName);
-  const ok = await postCheckin(wpName, iso, ACTIVE_RUNNER);
-  if (!ok) {
-    if (prev) CHECKINS[wpName] = prev; else delete CHECKINS[wpName];
-    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin(wpName);
-  }
+  _pendingCheckins++;
+  try {
+    const ok = await postCheckin(wpName, iso, ACTIVE_RUNNER);
+    if (!ok) {
+      if (prev) CHECKINS[wpName] = prev; else delete CHECKINS[wpName];
+      saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin(wpName);
+    }
+  } finally { _pendingCheckins--; }
 }
 
 async function revokeCheckin(wpName) {
@@ -805,11 +820,14 @@ async function revokeCheckin(wpName) {
   saveCheckinsCache();
   applyCheckins();
   refreshUIAfterCheckin(wpName);
-  const ok = await postCheckin(wpName, '', ACTIVE_RUNNER || prev.runner || '');
-  if (!ok) {
-    CHECKINS[wpName] = prev;
-    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin(wpName);
-  }
+  _pendingCheckins++;
+  try {
+    const ok = await postCheckin(wpName, '', ACTIVE_RUNNER || prev.runner || '');
+    if (!ok) {
+      CHECKINS[wpName] = prev;
+      saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin(wpName);
+    }
+  } finally { _pendingCheckins--; }
 }
 
 function refreshUIAfterCheckin(wpName) {
