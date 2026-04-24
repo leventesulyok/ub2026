@@ -130,10 +130,9 @@ header p{font-size:10px;color:#9999cc}
 .pw-arrival{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;line-height:1.3;max-width:46%}
 .pw-arrival-label{font-size:10px;color:#9999bb}
 .pw-arrival-time{font-size:13px;color:#ffcc55;font-weight:700}
-.pw-checkin-row{margin:5px 0 2px}
-.pw-checkin-btn{display:block;width:100%;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;min-height:44px;touch-action:manipulation;line-height:1.2;border:none}
-.pw-checkin-go{border:1px solid rgba(136,204,255,.4)!important;background:rgba(136,204,255,.14);color:#88ccff}
-.pw-checkin-revoke{border:1px solid rgba(136,255,187,.4)!important;background:rgba(136,255,187,.14);color:#88ffbb}
+.pw-checkin-btn{display:inline-flex;align-items:center;padding:2px 8px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;touch-action:manipulation;line-height:1.4;white-space:nowrap;flex-shrink:0}
+.pw-checkin-go{border:1px solid rgba(80,200,100,.5);background:rgba(80,200,100,.18);color:#66dd88}
+.pw-checkin-revoke{border:1px solid rgba(255,80,80,.5);background:rgba(255,80,80,.15);color:#ff7777}
 .pw-section-label{font-size:10px;color:#7777aa;text-transform:uppercase;letter-spacing:.6px;margin:10px 0 5px}
 .pw-seg{border-left:3px solid;border-radius:0 8px 8px 0;padding:7px 8px 7px 10px;margin-bottom:6px;background:rgba(255,255,255,0.03)}
 .pw-seg-body{display:flex;flex-direction:column;gap:3px}
@@ -167,7 +166,7 @@ header p{font-size:10px;color:#9999cc}
   .pw-wp-name{font-size:13px}
   .pw-arrival{max-width:44%}
   .pw-arrival-time{font-size:12px}
-  .pw-checkin-btn{font-size:12px;min-height:46px;padding:10px 10px}
+  .pw-checkin-btn{font-size:11px;padding:3px 8px}
   .pw-info-row{flex-direction:column}
   .pw-info-row .pw-szallas-box{border-left:none;border-top:1px solid rgba(255,255,255,0.1);padding-left:0;margin-top:4px}
   .pw-relay-people{flex-direction:column}
@@ -213,7 +212,7 @@ const SUN_LAT=46.832139, SUN_LON=17.517992;
 const MOON_LAT=47.076952, MOON_LON=18.084400;
 
 
-const map=L.map('map',{center:[46.87,17.70],zoom:10,minZoom:8.5,zoomSnap:0.5,maxBounds:[[46.0,16.3],[47.8,19.2]],maxBoundsViscosity:1.0});
+const map=L.map('map',{center:[46.87,17.70],zoom:10,minZoom:9,zoomSnap:0.5,maxBounds:[[46.0,16.3],[47.8,19.2]],maxBoundsViscosity:1.0});
 L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png',{
   attribution:'&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/">CARTO</a>',
   subdomains:'abcd',maxZoom:19
@@ -810,6 +809,7 @@ async function checkinAt(wpName) {
 async function revokeCheckin(wpName) {
   const prev = CHECKINS[wpName];
   if (!prev) return;
+  if (!confirm(`Biztosan törlöd a check-int: ${wpName}?`)) return;
   delete CHECKINS[wpName];
   saveCheckinsCache();
   applyCheckins();
@@ -1078,16 +1078,16 @@ function buildWpHtml(wp, i) {
     const deltaLine = (delta !== 0) ? `<div style="font-size:11px;color:${deltaColor};margin-top:1px;font-weight:600">${fmtDeltaLabel(delta)}</div>` : '';
     arrBadge = `<span class="pw-arrival" style="text-align:right"><span class="pw-arrival-label">${lbl}</span><span class="pw-arrival-time" style="color:${timeColor};font-size:13px">${icon} ${wp.arrival}</span>${plannedLine}${deltaLine}</span>`;
   }
-  let html = `<div class="pw-title"><span class="pw-wp-name">${wp.name}${nightTag}</span>${arrBadge}</div>`;
+  let checkinBtn = '';
   if (i > 0) {
     const wpEsc = wp.name.replace(/'/g, "\\'");
     if (wp._checkedIn) {
-      const who = wp._checkinRunner ? ' ('+wp._checkinRunner+')' : '';
-      html += `<div class="pw-checkin-row"><button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">↺ Visszavon ${wp.arrival}${who}</button></div>`;
+      checkinBtn = `<button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">✕ visszavont</button>`;
     } else {
-      html += `<div class="pw-checkin-row"><button onclick="event.stopPropagation();checkinAt('${wpEsc}')" class="pw-checkin-btn pw-checkin-go">✓ Frissítőpontra ért</button></div>`;
+      checkinBtn = `<button onclick="event.stopPropagation();checkinAt('${wpEsc}')" class="pw-checkin-btn pw-checkin-go">✓ beért</button>`;
     }
   }
+  let html = `<div class="pw-title"><span class="pw-wp-name">${wp.name}${nightTag} ${checkinBtn}</span>${arrBadge}</div>`;
   const waze=`https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes`;
   const navIcons=`<div class="pw-nav-inline"><div class="pw-navbtn" title="Google Maps" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="22" height="22" style="object-fit:contain;border-radius:3px"></div><div class="pw-navbtn" title="Waze" onclick="window.open('${waze}','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="22" height="22" style="object-fit:contain;border-radius:3px"></div></div>`;
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather-nav-row"><div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C${w.wind!=null?` <span class="pw-wind">💨 ${w.wind} km/h ${w.windDir}</span>`:""}</div><div class="pw-weather-desc">${w.desc}</div></div></div>${navIcons}</div>`;} else { html+=`<div class="pw-weather-nav-row" style="justify-content:flex-end">${navIcons}</div>`; }
