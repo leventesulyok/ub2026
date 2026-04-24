@@ -960,11 +960,8 @@ function setActiveRunner(name) {
       lbl.innerHTML = '🙋 Név…';
     }
   }
-  if (ACTIVE_RUNNER) {
-    requestGPSSharing();
-  } else {
-    stopGPSSharing();
-  }
+  stopGPSSharing();
+  if (ACTIVE_RUNNER) requestGPSSharing();
 }
 
 function openRunnerPicker() {
