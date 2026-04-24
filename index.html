@@ -666,14 +666,6 @@ function minToHhmm(mins) {
   mins = ((mins % 1440) + 1440) % 1440;
   return String(Math.floor(mins/60)).padStart(2,'0') + ':' + String(mins%60).padStart(2,'0');
 }
-function deltaMinSigned(planned, actual) {
-  const p = hhmmToMin(planned), a = hhmmToMin(actual);
-  if (p === null || a === null) return 0;
-  let d = a - p;
-  if (d < -720) d += 1440;
-  if (d >  720) d -= 1440;
-  return d;
-}
 function fmtDeltaMin(d) {
   if (d === 0) return '±0p';
   const sign = d > 0 ? '+' : '−';
@@ -970,7 +962,7 @@ let _gpsActive = false, _gpsWatchId = null, _gpsMarker = null, _gpsCircle = null
 
 function getActiveSegments() {
   const nowMs = Date.now();
-  const parseAbs = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(RACE_DATE+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
+  const parseAbs = t => { const d = parseRaceTime(t); return d ? d.getTime() : null; };
   return S.reduce((acc, seg, i) => {
     let from = parseAbs(seg.time_from), to = parseAbs(seg.time_to);
     if (from === null && to !== null) from = to - 60*60*1000;
@@ -1001,7 +993,7 @@ function updateHeaderProgress() {
   if (!fill || !txt) return;
   const totalKm = S.reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
   const _nowMs = Date.now();
-  const parseAbsTP = t => { if(!t) return null; const [h,m]=t.split(':').map(Number); return new Date(RACE_DATE+'T'+String(h).padStart(2,'0')+':'+String(m).padStart(2,'0')+':00').getTime(); };
+  const parseAbsTP = t => { const d = parseRaceTime(t); return d ? d.getTime() : null; };
   const doneKm  = S.filter(s=>{ const t=parseAbsTP(s.time_to); return t!==null && t<=_nowMs; }).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
   const pct = totalKm>0 ? Math.min(100,(doneKm/totalKm*100)) : 0;
   fill.style.width = pct.toFixed(1)+'%';
@@ -1127,6 +1119,10 @@ html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body">
 }
 
 function updateMapData() {
+  S.forEach((seg, i) => {
+    const pl = _activePolylines.get(i);
+    if (pl) pl.setPopupContent(buildSegPopup(seg));
+  });
   // setIcon() bezárja a nyitott popupot (Leaflet-bug) – mentjük és újranyitjuk.
   W.forEach((wp, i) => {
     const marker = _wpMarkers.get(i);
@@ -1147,17 +1143,22 @@ function updateMapData() {
 }
 
 
-function buildMap() {
-  clearDynLayers();
-S.forEach((seg,_si)=>{
+function buildSegPopup(seg) {
   const isNight=seg.phase==='night';
   const color=C[seg.runner];
   const sp=seg.sponsor?`<div style="font-size:11px;color:#ffcc66;margin-top:2px">&#x1F4CB; ${seg.sponsor}</div>`:'';
   const distKm = (parseFloat(seg.km) || segDistKm(seg.coords)).toFixed(1);
   const timeRange = (seg.time_from && seg.time_to) ? `<span style="color:#7777aa;font-size:10px"> · ${seg.time_from}–${seg.time_to}</span>` : '';
-  const popup=`<div style="font-weight:700;font-size:13px;color:${color}">${seg.runner}${isNight?' &#x1F319;':''}</div><div style="font-size:11px;color:#aaaacc;margin-top:2px">${seg.from} &#x2192; ${seg.to}</div><div style="font-size:11px;color:#8888bb;margin-top:3px">📏 ${distKm} km · ⬆️ ${seg.dplus||0}m · ⬇️ ${seg.dminus||0}m${timeRange}</div><div class="pw-pace-row">${paceChips(distKm, seg.pace)}</div>${sp}`;
+  return `<div style="font-weight:700;font-size:13px;color:${color}">${seg.runner}${isNight?' &#x1F319;':''}</div><div style="font-size:11px;color:#aaaacc;margin-top:2px">${seg.from} &#x2192; ${seg.to}</div><div style="font-size:11px;color:#8888bb;margin-top:3px">📏 ${distKm} km · ⬆️ ${seg.dplus||0}m · ⬇️ ${seg.dminus||0}m${timeRange}</div><div class="pw-pace-row">${paceChips(distKm, seg.pace)}</div>${sp}`;
+}
+
+function buildMap() {
+  clearDynLayers();
+S.forEach((seg,_si)=>{
+  const color=C[seg.runner];
+  const isNight=seg.phase==='night';
   const base=L.polyline(seg.coords,{color,weight:6,opacity:0.95,lineCap:'round',lineJoin:'round'});
-  base.bindPopup(popup,{maxWidth:500});
+  base.bindPopup(buildSegPopup(seg),{maxWidth:500});
   if(!RG[seg.runner])RG[seg.runner]=[];
   RG[seg.runner].push(base);
   base.addTo(map); _activePolylines.set(_si, base); _dynLayers.push(base);
