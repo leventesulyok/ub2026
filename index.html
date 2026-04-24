@@ -819,17 +819,14 @@ function requestGPSSharing() {
 }
 
 function updatePositionMarkers() {
-  const STALE_MS = 2 * 60 * 1000;  // 2 perc: elhalványul
-  const REMOVE_MS = 10 * 60 * 1000; // 10 perc: eltűnik
+  const DIM_MS = 10 * 60 * 1000; // 10 perc felett halványabb
   const now = Date.now();
   Object.entries(POSITIONS).forEach(([runner, pos]) => {
     if (!pos || isNaN(pos.lat) || isNaN(pos.lon)) return;
     const tsMs = pos.ts ? new Date(pos.ts).getTime() : 0;
     const ageMs = now - tsMs;
-    if (tsMs && ageMs > REMOVE_MS) return; // régi adat, nem jelenítjük meg
-    const stale = ageMs > STALE_MS;
     const color = C[runner] || '#aaaaaa';
-    const opacity = stale ? 0.35 : 1;
+    const opacity = (tsMs && ageMs > DIM_MS) ? 0.35 : 1;
     const existing = _posMarkers.get(runner);
     const latlng = [pos.lat, pos.lon];
     const iconHtml = `<div style="opacity:${opacity};filter:drop-shadow(0 0 4px ${color})"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="${color}"><circle cx="12" cy="5" r="3.5"/><path d="M12 10c-3.5 0-6 1.8-6 4v2h12v-2c0-2.2-2.5-4-6-4z"/></svg></div>`;
