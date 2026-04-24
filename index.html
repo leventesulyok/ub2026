@@ -799,10 +799,12 @@ function detectNewCheckins() {
   Object.entries(CHECKINS).forEach(([wp, ci]) => {
     const prev = _prevCheckinSnapshot[wp];
     if (!prev) {
-      // Új check-in
       const runner = ci.runner || '?';
       const time = ci.datetime ? fmtHHMM(new Date(ci.datetime)) : '';
-      showBrowserNotification(`🏃 ${runner} beért`, `${wp}${time ? ' · ' + time : ''}`);
+      const wpObj = W.find(w => w.name === wp);
+      const delta = wpObj ? (wpObj._effDelta || 0) : 0;
+      const deltaStr = delta !== 0 ? fmtDeltaLabel(delta) : 'terv szerint';
+      showBrowserNotification(`🏃 ${runner} beért · ${deltaStr}`, `${wp}${time ? ' · ' + time : ''}`);
     }
   });
   // Frissítjük a snapshot-ot
