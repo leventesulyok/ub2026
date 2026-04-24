@@ -125,10 +125,15 @@ header p{font-size:10px;color:#9999cc}
 .pw-relay-unit .pw-relay-label{display:block;font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
 .pw-relay-chips{display:flex;gap:5px;flex-wrap:wrap}
 
-.pw-title{display:flex;justify-content:space-between;align-items:center;font-size:15px!important;font-weight:700;color:#eeeeff;margin-bottom:2px}
-.pw-arrival{display:flex;flex-direction:column;align-items:flex-end;line-height:1.3}
+.pw-title{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:15px;font-weight:700;color:#eeeeff;margin-bottom:4px;padding-bottom:5px;border-bottom:1px solid #2a2a50}
+.pw-wp-name{flex:1;min-width:0;word-break:break-word;line-height:1.3;font-size:14px;font-weight:700;color:#eeeeff}
+.pw-arrival{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;line-height:1.3;max-width:46%}
 .pw-arrival-label{font-size:10px;color:#9999bb}
 .pw-arrival-time{font-size:13px;color:#ffcc55;font-weight:700}
+.pw-checkin-row{margin:5px 0 2px}
+.pw-checkin-btn{display:block;width:100%;padding:9px 12px;border-radius:8px;font-size:13px;font-weight:600;cursor:pointer;text-align:center;min-height:44px;touch-action:manipulation;line-height:1.2;border:none}
+.pw-checkin-go{border:1px solid rgba(136,204,255,.4)!important;background:rgba(136,204,255,.14);color:#88ccff}
+.pw-checkin-revoke{border:1px solid rgba(136,255,187,.4)!important;background:rgba(136,255,187,.14);color:#88ffbb}
 .pw-section-label{font-size:10px;color:#7777aa;text-transform:uppercase;letter-spacing:.6px;margin:10px 0 5px}
 .pw-seg{border-left:3px solid;border-radius:0 8px 8px 0;padding:7px 8px 7px 10px;margin-bottom:6px;background:rgba(255,255,255,0.03)}
 .pw-seg-body{display:flex;flex-direction:column;gap:3px}
@@ -137,8 +142,8 @@ header p{font-size:10px;color:#9999cc}
 .pw-seg-sponsor{font-size:10px;color:#b8963e;margin-top:3px;font-style:italic}
 .pw-seg-atbtn{display:flex;justify-content:flex-end;margin-top:4px}
 
-.leaflet-popup-content { min-width: 300px; }
-.leaflet-popup-content-wrapper { max-width: 510px !important; }
+.leaflet-popup-content { min-width: 280px; max-width: 480px; }
+.leaflet-popup-content-wrapper { max-width: 500px !important; }
 
 .pw-info-row{display:flex;gap:8px;margin-top:6px;align-items:flex-start;padding-top:6px;border-top:1px solid rgba(255,200,0,.15)}
 .pw-info-row .pw-car-grid{flex:1;min-width:0;margin-top:0;padding-top:0;border-top:none}
@@ -154,14 +159,20 @@ header p{font-size:10px;color:#9999cc}
 .stats-progbar{height:5px;background:rgba(255,255,255,0.1);border-radius:3px;margin-top:3px;overflow:hidden}
 .stats-progfill{height:100%;background:linear-gradient(90deg,#4488ff,#44ddaa);border-radius:3px;transition:width .5s}
 
-/* Mobile responsive popup */
-@media (max-width:420px){
-  .leaflet-popup-content-wrapper{max-width:96vw!important}
-  .leaflet-popup-content{min-width:unset!important}
+/* Mobile responsive popup – iPhone 13-17 (375-430px wide) */
+@media (max-width:480px){
+  .leaflet-popup-content-wrapper{max-width:96vw!important;border-radius:12px!important}
+  .leaflet-popup-content{min-width:unset!important;margin:10px 11px!important}
+  .pw-title{gap:6px}
+  .pw-wp-name{font-size:13px}
+  .pw-arrival{max-width:44%}
+  .pw-arrival-time{font-size:12px}
+  .pw-checkin-btn{font-size:12px;min-height:46px;padding:10px 10px}
   .pw-info-row{flex-direction:column}
   .pw-info-row .pw-szallas-box{border-left:none;border-top:1px solid rgba(255,255,255,0.1);padding-left:0;margin-top:4px}
   .pw-relay-people{flex-direction:column}
   .pw-pace-row{flex-wrap:wrap!important}
+  .pw-navbtn{width:42px!important;height:42px!important}
 }
 
 .pw-szallason{font-size:10px;color:#8888bb;margin-top:5px;padding-top:5px;border-top:1px solid rgba(255,255,255,0.08);line-height:1.5}
@@ -1067,17 +1078,16 @@ function buildWpHtml(wp, i) {
     const deltaLine = (delta !== 0) ? `<div style="font-size:11px;color:${deltaColor};margin-top:1px;font-weight:600">${fmtDeltaLabel(delta)}</div>` : '';
     arrBadge = `<span class="pw-arrival" style="text-align:right"><span class="pw-arrival-label">${lbl}</span><span class="pw-arrival-time" style="color:${timeColor};font-size:13px">${icon} ${wp.arrival}</span>${plannedLine}${deltaLine}</span>`;
   }
-  let btnHtml = '';
+  let html = `<div class="pw-title"><span class="pw-wp-name">${wp.name}${nightTag}</span>${arrBadge}</div>`;
   if (i > 0) {
     const wpEsc = wp.name.replace(/'/g, "\\'");
     if (wp._checkedIn) {
       const who = wp._checkinRunner ? ' ('+wp._checkinRunner+')' : '';
-      btnHtml = `<button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,255,187,.4);background:rgba(136,255,187,.14);color:#88ffbb;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">↺ Visszavon ${wp.arrival}${who}</button>`;
+      html += `<div class="pw-checkin-row"><button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">↺ Visszavon ${wp.arrival}${who}</button></div>`;
     } else {
-      btnHtml = `<button onclick="event.stopPropagation();checkinAt('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,204,255,.4);background:rgba(136,204,255,.14);color:#88ccff;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">✓ Frissítőpontra ért</button>`;
+      html += `<div class="pw-checkin-row"><button onclick="event.stopPropagation();checkinAt('${wpEsc}')" class="pw-checkin-btn pw-checkin-go">✓ Frissítőpontra ért</button></div>`;
     }
   }
-  let html=`<div class="pw-title"><span>${wp.name}${nightTag}${btnHtml}</span>${arrBadge}</div>`;
   const waze=`https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes`;
   const navIcons=`<div class="pw-nav-inline"><div class="pw-navbtn" title="Google Maps" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="22" height="22" style="object-fit:contain;border-radius:3px"></div><div class="pw-navbtn" title="Waze" onclick="window.open('${waze}','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="22" height="22" style="object-fit:contain;border-radius:3px"></div></div>`;
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather-nav-row"><div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C${w.wind!=null?` <span class="pw-wind">💨 ${w.wind} km/h ${w.windDir}</span>`:""}</div><div class="pw-weather-desc">${w.desc}</div></div></div>${navIcons}</div>`;} else { html+=`<div class="pw-weather-nav-row" style="justify-content:flex-end">${navIcons}</div>`; }
