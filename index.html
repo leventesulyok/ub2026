@@ -764,6 +764,52 @@ async function postCheckin(waypoint, datetime, runner) {
   } catch(e) { showToast('Check-in hiba: ' + e.message); return false; }
 }
 
+// ── Notifications ──────────────────────────────────────────────────────────
+
+let _prevCheckinSnapshot = null; // { wpName: runner } – előző poll állapota
+
+function requestNotificationPermission() {
+  if (!('Notification' in window)) return;
+  if (Notification.permission === 'default') {
+    Notification.requestPermission();
+  }
+}
+
+function showBrowserNotification(title, body) {
+  if (!('Notification' in window) || Notification.permission !== 'granted') return;
+  try {
+    const n = new Notification(title, {
+      body,
+      icon: 'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"><text y="20" font-size="20">🏃</text></svg>',
+      tag: 'ub2026-checkin',
+      renotify: true,
+      silent: false
+    });
+    setTimeout(() => n.close(), 8000);
+  } catch(e) { console.warn('Notification hiba:', e); }
+}
+
+function detectNewCheckins() {
+  if (_prevCheckinSnapshot === null) {
+    // Első poll – csak tároljuk, ne értesítsünk
+    _prevCheckinSnapshot = {};
+    Object.entries(CHECKINS).forEach(([wp, ci]) => { _prevCheckinSnapshot[wp] = ci.runner; });
+    return;
+  }
+  Object.entries(CHECKINS).forEach(([wp, ci]) => {
+    const prev = _prevCheckinSnapshot[wp];
+    if (!prev) {
+      // Új check-in
+      const runner = ci.runner || '?';
+      const time = ci.datetime ? fmtHHMM(new Date(ci.datetime)) : '';
+      showBrowserNotification(`🏃 ${runner} beért`, `${wp}${time ? ' · ' + time : ''}`);
+    }
+  });
+  // Frissítjük a snapshot-ot
+  _prevCheckinSnapshot = {};
+  Object.entries(CHECKINS).forEach(([wp, ci]) => { _prevCheckinSnapshot[wp] = ci.runner; });
+}
+
 // ── F3: Live GPS megosztás ─────────────────────────────────────────────────
 
 function haversineM(lat1, lon1, lat2, lon2) {
@@ -972,7 +1018,7 @@ function setActiveRunner(name) {
     }
   }
   stopGPSSharing();
-  if (ACTIVE_RUNNER) requestGPSSharing();
+  if (ACTIVE_RUNNER) { requestGPSSharing(); requestNotificationPermission(); }
 }
 
 function openRunnerPicker() {
@@ -1363,6 +1409,7 @@ async function fetchAndRender() {
     updateHeaderDelta();
     updatePositionMarkers();
   } catch(e) { console.error('buildMap:', e); setStatus(false, 'buildMap: '+e.message); return; }
+  detectNewCheckins();
   const _t = new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'});
   setStatus(true, 'OK');
   const _lu = document.getElementById('lastUpdated');
