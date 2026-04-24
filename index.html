@@ -9,7 +9,7 @@
 <script src="https://cdn.jsdelivr.net/npm/leaflet@1.9.4/dist/leaflet.min.js"></script>
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',Arial,sans-serif;background:#12122a;color:#fff;display:flex;flex-direction:column;height:100dvh}
+body{font-family:'Segoe UI',Arial,sans-serif;background:#12122a;color:#fff;display:flex;flex-direction:column;height:100dvh;overflow:hidden;overscroll-behavior:none}
 header{padding:10px 18px;background:#1a1a35;border-bottom:1px solid #2a2a50;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
 header h1{font-size:15px;font-weight:700}
 header p{font-size:10px;color:#9999cc}
@@ -106,7 +106,7 @@ header p{font-size:10px;color:#9999cc}
 .seg-active { animation: seg-pulse 1.8s ease-in-out infinite; }
 
 /* ── Pace chip ── */
-.pw-pace-row { display:flex; flex-wrap:nowrap; gap:4px; margin-top:5px; overflow-x:auto; }
+.pw-pace-row { display:flex; flex-wrap:wrap; gap:4px; margin-top:5px; }
 .pw-pace-chip {
   font-size:10px; padding:2px 7px; border-radius:10px;
   background:rgba(120,120,200,0.18); color:#aabbdd;
@@ -160,7 +160,7 @@ header p{font-size:10px;color:#9999cc}
 
 /* Mobile responsive popup – iPhone 13-17 (375-430px wide) */
 @media (max-width:480px){
-  .leaflet-popup-content-wrapper{max-width:96vw!important;border-radius:12px!important;max-height:70vh;overflow-y:auto}
+  .leaflet-popup-content-wrapper{max-width:96vw!important;border-radius:12px!important;max-height:70vh;overflow-y:auto;overflow-x:hidden}
   .leaflet-popup-content{min-width:unset!important;margin:10px 11px!important}
   .pw-title{gap:6px}
   .pw-wp-name{font-size:13px}
