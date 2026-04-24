@@ -253,7 +253,7 @@ const CSV_VALTAS = 'https://docs.google.com/spreadsheets/d/e/2PACX-1vQv10TYmwM-P
 // CHECK-IN (Apps Script Web App) – fázis 1+2: multi-device szinkron
 // ═══════════════════════════════════════════════════════════════════════════════
 const CHECKIN_URL = 'https://script.google.com/macros/s/AKfycbxv-flSewelbJzEUeblLj-4wwkkR6JMWccDtK5SMuXtUJMPcdxiNG4lYz8CAQgbPSEe/exec'; // TODO: illeszd be ide a gas-checkins.js deploy után kapott URL-t
-const CHECKINS = {}; // { waypoint: { time:"HH:MM", runner:"Név", ts:"ISO" } }
+const CHECKINS = {}; // { waypoint: { datetime:"ISO", runner:"Név", ts:"ISO" } }
 const LS_KEY_CHECKINS = 'ub26_checkins';
 const LS_KEY_RUNNER   = 'ub26_active_runner';
 let ACTIVE_RUNNER = localStorage.getItem(LS_KEY_RUNNER) || '';
@@ -672,6 +672,34 @@ function fmtDeltaMin(d) {
   const h = Math.floor(a/60), m = a%60;
   return sign + h + 'ó' + (m ? ' '+m+'p' : '');
 }
+function fmtDeltaLabel(d) {
+  if (d === 0) return '';
+  const a = Math.abs(d);
+  const magn = a < 60 ? (a + 'p') : (Math.floor(a/60) + 'ó' + (a%60 ? ' '+(a%60)+'p' : ''));
+  return d > 0 ? (magn + ' késés') : (magn + ' gyorsabb');
+}
+function fmtHHMM(d) {
+  if (!(d instanceof Date) || isNaN(d.getTime())) return '';
+  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+}
+// Minuták szerinti signed delta két Date között (planned→actual). Wrap ±12h.
+function deltaMinDates(pd, ad) {
+  if (!pd || !ad) return 0;
+  let d = Math.round((ad.getTime() - pd.getTime()) / 60000);
+  if (d < -720) d += 1440;
+  if (d >  720) d -= 1440;
+  return d;
+}
+// Check-in rekord → Date (datetime vagy legacy time fallback-kel)
+function ciToDate(ci) {
+  if (!ci) return null;
+  if (ci.datetime) {
+    const d = new Date(ci.datetime);
+    if (!isNaN(d.getTime())) return d;
+  }
+  if (ci.time) return parseRaceTime(ci.time);
+  return null;
+}
 
 function saveCheckinsCache() {
   try { localStorage.setItem(LS_KEY_CHECKINS, JSON.stringify(CHECKINS)); } catch(e){}
@@ -699,13 +727,13 @@ async function fetchCheckins() {
   } catch(e) { console.warn('Checkin fetch (non-fatal):', e); }
 }
 
-async function postCheckin(waypoint, time, runner) {
+async function postCheckin(waypoint, datetime, runner) {
   if (!CHECKIN_URL) { alert('Check-in URL nincs beállítva (index.html: CHECKIN_URL).'); return false; }
   try {
     const r = await fetch(CHECKIN_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ waypoint, time, runner })
+      body: JSON.stringify({ waypoint, datetime, runner })
     });
     if (!r.ok) throw new Error('HTTP '+r.status);
     const j = await r.json();
@@ -716,22 +744,26 @@ async function postCheckin(waypoint, time, runner) {
 
 function applyCheckins() {
   // Forward-propagálás: d_m = C_m - P_m ha van check-in, különben d_{m-1}.
-  // Forrás: wp._plannedArrival (ha van), különben wp.arrival (friss applyUB26 után).
+  // Delta-t datetime alapján számolunk (Date-Date), HH:MM-et csak megjelenítésre használjuk.
   let delta = 0;
   W.forEach(wp => {
     const planned = wp._plannedArrival || wp.arrival || '';
     wp._plannedArrival = planned;
     const ci = CHECKINS[wp.name];
-    if (ci && ci.time && planned) {
-      delta = deltaMinSigned(planned, ci.time);
+    const ciDate = ciToDate(ci);
+    const plannedDate = planned ? parseRaceTime(planned) : null;
+    if (ci && ciDate && plannedDate) {
+      delta = deltaMinDates(plannedDate, ciDate);
       wp._effDelta = delta;
       wp._checkedIn = true;
       wp._checkinRunner = ci.runner || '';
-      wp.arrival = ci.time;
+      wp._checkinDate = ciDate;
+      wp.arrival = fmtHHMM(ciDate);
     } else {
       wp._effDelta = delta;
       wp._checkedIn = false;
       wp._checkinRunner = '';
+      wp._checkinDate = null;
       wp.arrival = planned && delta !== 0 ? minToHhmm(hhmmToMin(planned) + delta) : planned;
     }
   });
@@ -753,16 +785,16 @@ function applyCheckins() {
 async function checkinAt(wpName) {
   if (!ACTIVE_RUNNER) { alert('Előbb válaszd ki a neved a fejlécben! (🙋 gomb)'); return; }
   const now = new Date();
-  const time = String(now.getHours()).padStart(2,'0') + ':' + String(now.getMinutes()).padStart(2,'0');
+  const iso = now.toISOString();
   const prev = CHECKINS[wpName];
-  CHECKINS[wpName] = { time, runner: ACTIVE_RUNNER, ts: now.toISOString() };
+  CHECKINS[wpName] = { datetime: iso, runner: ACTIVE_RUNNER, ts: iso };
   saveCheckinsCache();
   applyCheckins();
-  refreshUIAfterCheckin();
-  const ok = await postCheckin(wpName, time, ACTIVE_RUNNER);
+  refreshUIAfterCheckin(wpName);
+  const ok = await postCheckin(wpName, iso, ACTIVE_RUNNER);
   if (!ok) {
     if (prev) CHECKINS[wpName] = prev; else delete CHECKINS[wpName];
-    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin();
+    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin(wpName);
   }
 }
 
@@ -772,19 +804,30 @@ async function revokeCheckin(wpName) {
   delete CHECKINS[wpName];
   saveCheckinsCache();
   applyCheckins();
-  refreshUIAfterCheckin();
+  refreshUIAfterCheckin(wpName);
   const ok = await postCheckin(wpName, '', ACTIVE_RUNNER || prev.runner || '');
   if (!ok) {
     CHECKINS[wpName] = prev;
-    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin();
+    saveCheckinsCache(); applyCheckins(); refreshUIAfterCheckin(wpName);
   }
 }
 
-function refreshUIAfterCheckin() {
+function refreshUIAfterCheckin(wpName) {
   if (_mapBuilt) updateMapData();
   updateHeaderProgress();
   updateHeaderDelta();
   updateNowRunning();
+  // Ha az érintett waypoint popupja nyitva van, kényszerítsük a frissítést.
+  if (wpName) {
+    const idx = W.findIndex(w => w.name === wpName);
+    if (idx >= 0) {
+      const marker = _wpMarkers.get(idx);
+      if (marker) {
+        const p = marker.getPopup();
+        if (p && p.isOpen && p.isOpen()) p.update();
+      }
+    }
+  }
 }
 
 function setActiveRunner(name) {
@@ -1018,23 +1061,25 @@ function buildWpHtml(wp, i) {
     const delta = wp._effDelta || 0;
     const planned = wp._plannedArrival || wp.arrival;
     const showPlanned = delta !== 0 && planned && planned !== wp.arrival;
-    const deltaStr = delta !== 0 ? ` <span style="font-size:10px;color:${delta>0?'#ff9977':'#88ffbb'}">${fmtDeltaMin(delta)}</span>` : '';
-    const plannedStr = showPlanned ? `<span style="font-size:9px;color:#888">eredeti: ${planned}</span>` : '';
+    const deltaColor = delta > 0 ? '#ff9977' : '#88ffbb';
     const icon = wp._checkedIn ? '✓' : '&#x23F0;';
     const timeColor = wp._checkedIn ? '#88ffbb' : '#ffcc55';
     const lbl = wp._checkedIn ? 'Érkezett' : 'Várható érkezés';
-    arrBadge = `<span class="pw-arrival"><span class="pw-arrival-label">${lbl}</span><span class="pw-arrival-time" style="color:${timeColor}">${icon} ${wp.arrival}${deltaStr}</span>${plannedStr}</span>`;
+    const plannedLine = showPlanned ? `<div style="font-size:12px;color:#9999bb;margin-top:1px">eredeti: <span style="color:#bbbbdd">${planned}</span></div>` : '';
+    const deltaLine = (delta !== 0) ? `<div style="font-size:11px;color:${deltaColor};margin-top:1px;font-weight:600">${fmtDeltaLabel(delta)}</div>` : '';
+    arrBadge = `<span class="pw-arrival" style="text-align:right"><span class="pw-arrival-label">${lbl}</span><span class="pw-arrival-time" style="color:${timeColor};font-size:13px">${icon} ${wp.arrival}</span>${plannedLine}${deltaLine}</span>`;
   }
-  let html=`<div class="pw-title"><span>${wp.name}${nightTag}</span>${arrBadge}</div>`;
+  let btnHtml = '';
   if (i > 0) {
     const wpEsc = wp.name.replace(/'/g, "\\'");
     if (wp._checkedIn) {
       const who = wp._checkinRunner ? ' ('+wp._checkinRunner+')' : '';
-      html += `<div style="margin:4px 0"><button onclick="revokeCheckin('${wpEsc}')" style="width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(136,255,187,.4);background:rgba(136,255,187,.14);color:#88ffbb;font-size:12px;font-weight:600;cursor:pointer">↺ Visszavonás ${wp.arrival}${who}</button></div>`;
+      btnHtml = `<button onclick="revokeCheckin('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,255,187,.4);background:rgba(136,255,187,.14);color:#88ffbb;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">↺ Visszavon ${wp.arrival}${who}</button>`;
     } else {
-      html += `<div style="margin:4px 0"><button onclick="checkinAt('${wpEsc}')" style="width:100%;padding:6px 10px;border-radius:7px;border:1px solid rgba(136,204,255,.4);background:rgba(136,204,255,.14);color:#88ccff;font-size:12px;font-weight:600;cursor:pointer">✓ Érkezett most</button></div>`;
+      btnHtml = `<button onclick="checkinAt('${wpEsc}')" style="margin-left:6px;padding:3px 8px;border-radius:6px;border:1px solid rgba(136,204,255,.4);background:rgba(136,204,255,.14);color:#88ccff;font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap">✓ Frissítőpontra ért</button>`;
     }
   }
+  let html=`<div class="pw-title"><span>${wp.name}${nightTag}${btnHtml}</span>${arrBadge}</div>`;
   const waze=`https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes`;
   const navIcons=`<div class="pw-nav-inline"><div class="pw-navbtn" title="Google Maps" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="22" height="22" style="object-fit:contain;border-radius:3px"></div><div class="pw-navbtn" title="Waze" onclick="window.open('${waze}','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="22" height="22" style="object-fit:contain;border-radius:3px"></div></div>`;
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather-nav-row"><div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C${w.wind!=null?` <span class="pw-wind">💨 ${w.wind} km/h ${w.windDir}</span>`:""}</div><div class="pw-weather-desc">${w.desc}</div></div></div>${navIcons}</div>`;} else { html+=`<div class="pw-weather-nav-row" style="justify-content:flex-end">${navIcons}</div>`; }
@@ -1078,6 +1123,8 @@ function updateMapData() {
     if (!marker) return;
     const html = buildWpHtml(wp, i);
     marker.setPopupContent(html);
+    const p = marker.getPopup();
+    if (p && p.isOpen && p.isOpen()) p.update();
     const { icon, zIndexOffset, tooltipOffset } = makeWpIcon(wp);
     marker.setIcon(icon);
     marker.setZIndexOffset(zIndexOffset);
