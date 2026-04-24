@@ -1078,16 +1078,18 @@ function buildWpHtml(wp, i) {
     const deltaLine = (delta !== 0) ? `<div style="font-size:11px;color:${deltaColor};margin-top:1px;font-weight:600">${fmtDeltaLabel(delta)}</div>` : '';
     arrBadge = `<span class="pw-arrival" style="text-align:right"><span class="pw-arrival-label">${lbl}</span><span class="pw-arrival-time" style="color:${timeColor};font-size:13px">${icon} ${wp.arrival}</span>${plannedLine}${deltaLine}</span>`;
   }
-  let checkinBtn = '';
+  let rightBlock = arrBadge;
   if (i > 0) {
     const wpEsc = wp.name.replace(/'/g, "\\'");
+    let btn;
     if (wp._checkedIn) {
-      checkinBtn = `<button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">✕ visszavont</button>`;
+      btn = `<button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">Visszavon</button>`;
     } else {
-      checkinBtn = `<button onclick="event.stopPropagation();checkinAt('${wpEsc}')" class="pw-checkin-btn pw-checkin-go">✓ beért</button>`;
+      btn = `<button onclick="event.stopPropagation();checkinAt('${wpEsc}')" class="pw-checkin-btn pw-checkin-go">Beért</button>`;
     }
+    rightBlock = `<span style="display:flex;align-items:center;gap:6px;flex-shrink:0">${btn}${arrBadge}</span>`;
   }
-  let html = `<div class="pw-title"><span class="pw-wp-name">${wp.name}${nightTag} ${checkinBtn}</span>${arrBadge}</div>`;
+  let html = `<div class="pw-title"><span class="pw-wp-name">${wp.name}${nightTag}</span>${rightBlock}</div>`;
   const waze=`https://waze.com/ul?ll=${wp.lat},${wp.lon}&navigate=yes`;
   const navIcons=`<div class="pw-nav-inline"><div class="pw-navbtn" title="Google Maps" onclick="window.open('${gm}','_blank')" style="background:#fff;border:1px solid #e0e0e0"><img src="https://ssl.gstatic.com/images/branding/product/2x/maps_96dp.png" width="22" height="22" style="object-fit:contain;border-radius:3px"></div><div class="pw-navbtn" title="Waze" onclick="window.open('${waze}','_blank')" style="background:#05C8F7;border:1px solid #04aad6"><img src="https://www.waze.com/favicon.ico" width="22" height="22" style="object-fit:contain;border-radius:3px"></div></div>`;
   if(wp.weather){const w=wp.weather;html+=`<div class="pw-weather-nav-row"><div class="pw-weather"><span class="pw-weather-icon">${w.icon}</span><div><div class="pw-weather-temp">${w.temp}°C${w.wind!=null?` <span class="pw-wind">💨 ${w.wind} km/h ${w.windDir}</span>`:""}</div><div class="pw-weather-desc">${w.desc}</div></div></div>${navIcons}</div>`;} else { html+=`<div class="pw-weather-nav-row" style="justify-content:flex-end">${navIcons}</div>`; }
