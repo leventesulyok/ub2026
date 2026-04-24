@@ -1115,22 +1115,22 @@ html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body">
 }
 
 function updateMapData() {
-  // Update waypoint popup content, tooltips and icons without removing markers
+  // setIcon() bezárja a nyitott popupot (Leaflet-bug) – mentjük és újranyitjuk.
   W.forEach((wp, i) => {
     const marker = _wpMarkers.get(i);
     if (!marker) return;
     const html = buildWpHtml(wp, i);
     marker.setPopupContent(html);
     const p = marker.getPopup();
-    if (p && p.isOpen && p.isOpen()) p.update();
+    const wasOpen = p && p.isOpen && p.isOpen();
     const { icon, zIndexOffset, tooltipOffset } = makeWpIcon(wp);
     marker.setIcon(icon);
     marker.setZIndexOffset(zIndexOffset);
     const tipContent = wp.arrival ? `${wp.name} · ${wp.arrival}` : wp.name;
     marker.unbindTooltip();
     marker.bindTooltip(tipContent, { direction:'top', offset:tooltipOffset, opacity:0.97 });
+    if (wasOpen) marker.openPopup();
   });
-  // Update active segment styles only
   updateActiveSegments();
 }
 
