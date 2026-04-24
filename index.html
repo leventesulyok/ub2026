@@ -731,9 +731,14 @@ async function fetchCheckins() {
     if (!r.ok) throw new Error('HTTP '+r.status);
     const data = await r.json();
     if (data && typeof data === 'object' && !data.error && _pendingCheckins === 0) {
+      // Backward-compat: régi script flat { wp: {...} }, új script { checkins:{}, positions:{} }
+      const checkins = data.checkins || data;
+      const positions = data.positions || {};
       Object.keys(CHECKINS).forEach(k => delete CHECKINS[k]);
-      Object.keys(data).forEach(k => { CHECKINS[k] = data[k]; });
+      Object.keys(checkins).forEach(k => { CHECKINS[k] = checkins[k]; });
       saveCheckinsCache();
+      Object.keys(POSITIONS).forEach(k => delete POSITIONS[k]);
+      Object.keys(positions).forEach(k => { POSITIONS[k] = positions[k]; });
     }
   } catch(e) { console.warn('Checkin fetch (non-fatal):', e); }
 }
@@ -752,6 +757,101 @@ async function postCheckin(waypoint, datetime, runner) {
     return true;
   } catch(e) { showToast('Check-in hiba: ' + e.message); return false; }
 }
+
+// ── F3: Live GPS megosztás ─────────────────────────────────────────────────
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+async function postPosition(lat, lon, acc) {
+  if (!CHECKIN_URL || !ACTIVE_RUNNER) return;
+  try {
+    await fetch(CHECKIN_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ type: 'position', runner: ACTIVE_RUNNER, lat, lon, acc: acc || null })
+    });
+  } catch(e) { /* non-fatal, next interval will retry */ }
+}
+
+function startGPSSharing() {
+  if (!navigator.geolocation || !ACTIVE_RUNNER || !CHECKIN_URL) return;
+  if (_gpsShareWatchId !== null) return; // már fut
+  _gpsShareWatchId = navigator.geolocation.watchPosition(pos => {
+    const lat = pos.coords.latitude, lon = pos.coords.longitude, acc = pos.coords.accuracy;
+    if (_lastSharedLat !== null) {
+      const dist = haversineM(_lastSharedLat, _lastSharedLon, lat, lon);
+      if (dist < 20) return; // 20m küszöb alatt nem küldünk
+    }
+    _lastSharedLat = lat; _lastSharedLon = lon;
+    postPosition(lat, lon, acc);
+  }, err => {
+    console.warn('GPS share hiba:', err.message);
+  }, { enableHighAccuracy: false, maximumAge: 15000, timeout: 20000 });
+}
+
+function stopGPSSharing() {
+  if (_gpsShareWatchId !== null) {
+    navigator.geolocation.clearWatch(_gpsShareWatchId);
+    _gpsShareWatchId = null;
+  }
+  _lastSharedLat = null; _lastSharedLon = null;
+}
+
+function requestGPSSharing() {
+  if (!ACTIVE_RUNNER || !CHECKIN_URL || !navigator.geolocation) return;
+  if (_gpsShareWatchId !== null) return; // már fut
+  navigator.permissions && navigator.permissions.query({ name: 'geolocation' }).then(res => {
+    if (res.state === 'granted') {
+      startGPSSharing();
+    } else if (res.state === 'prompt') {
+      // engedélykérés: elindítjuk, ami automatikusan kiváltja a prompt-ot
+      startGPSSharing();
+    }
+    // 'denied' esetén csendben nem indítjuk el
+  }).catch(() => { startGPSSharing(); }); // ha permissions API nem elérhető, próbáljuk
+}
+
+function updatePositionMarkers() {
+  const STALE_MS = 2 * 60 * 1000; // 2 perc
+  const now = Date.now();
+  Object.entries(POSITIONS).forEach(([runner, pos]) => {
+    if (runner === ACTIVE_RUNNER) return; // saját pozíció = GPS kék dot
+    if (!pos || isNaN(pos.lat) || isNaN(pos.lon)) return;
+    const tsMs = pos.ts ? new Date(pos.ts).getTime() : 0;
+    const stale = (now - tsMs) > STALE_MS;
+    const color = C[runner] || '#aaaaaa';
+    const opacity = stale ? 0.35 : 1;
+    const existing = _posMarkers.get(runner);
+    const latlng = [pos.lat, pos.lon];
+    const iconHtml = `<div style="width:14px;height:14px;background:${color};border:2px solid #fff;border-radius:50%;opacity:${opacity};box-shadow:0 0 6px ${color}88"></div>`;
+    const icon = L.divIcon({ html: iconHtml, iconSize:[14,14], iconAnchor:[7,7], className:'' });
+    const ageMin = tsMs ? Math.round((now - tsMs) / 60000) : null;
+    const tooltip = runner + (ageMin !== null ? ` · ${ageMin} perce` : '');
+    if (existing) {
+      existing.setLatLng(latlng).setIcon(icon);
+      existing.unbindTooltip();
+      existing.bindTooltip(tooltip, { direction:'top', offset:[0,-7], opacity:0.95 });
+    } else {
+      const m = L.marker(latlng, { icon, zIndexOffset: 900 }).addTo(map);
+      m.bindTooltip(tooltip, { direction:'top', offset:[0,-7], opacity:0.95 });
+      _posMarkers.set(runner, m);
+    }
+  });
+  // Töröljük akiknél már nincs adat
+  _posMarkers.forEach((m, runner) => {
+    if (!POSITIONS[runner] || runner === ACTIVE_RUNNER) {
+      try { map.removeLayer(m); } catch(e) {}
+      _posMarkers.delete(runner);
+    }
+  });
+}
+
 
 function applyCheckins() {
   // Forward-propagálás: d_m = C_m - P_m ha van check-in, különben d_{m-1}.
@@ -859,6 +959,11 @@ function setActiveRunner(name) {
     } else {
       lbl.innerHTML = '🙋 Név…';
     }
+  }
+  if (ACTIVE_RUNNER) {
+    requestGPSSharing();
+  } else {
+    stopGPSSharing();
   }
 }
 
@@ -976,6 +1081,10 @@ let _activePolylines = new Map();
 const _wpMarkers = new Map(); // index -> marker
 let _mapBuilt = false;
 let _gpsActive = false, _gpsWatchId = null, _gpsMarker = null, _gpsCircle = null;
+const POSITIONS = {}; // { runner: { lat, lon, acc, ts } }
+const _posMarkers = new Map(); // runner -> L.marker
+let _gpsShareWatchId = null;
+let _lastSharedLat = null, _lastSharedLon = null;
 
 function getActiveSegments() {
   const nowMs = Date.now();
@@ -1245,6 +1354,7 @@ async function fetchAndRender() {
     updateNowRunning();
     updateHeaderProgress();
     updateHeaderDelta();
+    updatePositionMarkers();
   } catch(e) { console.error('buildMap:', e); setStatus(false, 'buildMap: '+e.message); return; }
   const _t = new Date().toLocaleTimeString('hu-HU',{hour:'2-digit',minute:'2-digit'});
   setStatus(true, 'OK');
