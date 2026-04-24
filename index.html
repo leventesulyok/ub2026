@@ -125,7 +125,7 @@ header p{font-size:10px;color:#9999cc}
 .pw-relay-unit .pw-relay-label{display:block;font-size:10px;color:#8888aa;text-transform:uppercase;letter-spacing:.5px;margin-bottom:5px}
 .pw-relay-chips{display:flex;gap:5px;flex-wrap:wrap}
 
-.pw-title{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;font-size:15px;font-weight:700;color:#eeeeff;margin-bottom:4px;padding-bottom:5px;border-bottom:1px solid #2a2a50}
+.pw-title{display:flex;justify-content:space-between;align-items:flex-start;gap:8px;flex-wrap:wrap;font-size:15px;font-weight:700;color:#eeeeff;margin-bottom:4px;padding-bottom:5px;border-bottom:1px solid #2a2a50}
 .pw-wp-name{flex:1;min-width:0;word-break:break-word;line-height:1.3;font-size:14px;font-weight:700;color:#eeeeff}
 .pw-arrival{display:flex;flex-direction:column;align-items:flex-end;flex-shrink:0;line-height:1.3;max-width:46%}
 .pw-arrival-label{font-size:10px;color:#9999bb}
@@ -277,6 +277,7 @@ function clearDynLayers() {
   _dynLayers.forEach(l => { try { map.removeLayer(l); } catch(e) {} });
   _dynLayers = [];
   _wpMarkers.clear();
+  _activePolylines.clear();
   Object.keys(RG).forEach(k => delete RG[k]);
 }
 
@@ -356,7 +357,7 @@ function getWeather(lat, arrStr) {
   if (!_weatherCache || !arrStr) return null;
   const hh = parseInt(arrStr.split(':')[0], 10);
   if (isNaN(hh)) return null;
-  const dateStr = '2026-04-25T' + String(hh).padStart(2,'0') + ':00';
+  const dateStr = (hh < 2 ? '2026-04-26T' : '2026-04-25T') + String(hh).padStart(2,'0') + ':00';
   const keys = Object.keys(_weatherCache);
   if (!keys.length) return null;
   const best = keys.reduce((a,b) => Math.abs(parseFloat(a)-lat) < Math.abs(parseFloat(b)-lat) ? a : b);
@@ -1092,7 +1093,7 @@ function buildWpHtml(wp, i) {
     if(r.futak&&r.futak[0]!=='-') html+=`<div class="pw-relay-people"><div class="pw-relay-unit"><span class="pw-relay-label">Fut</span><div class="pw-relay-chips">${chip(r.futak[0])} ${chip(r.futak[1])}</div></div>${r.valtak&&r.valtak[0]!=='-'?`<div class="pw-relay-unit"><span class="pw-relay-label">Vált</span><div class="pw-relay-chips">${chip(r.valtak[0])} ${chip(r.valtak[1])}</div></div>`:''}</div>`;
     if(false) html+='';
     if(false) html+='';
-    html+=`<div class="pw-info-row"><div class="pw-car-grid"><span class="pw-car-label">&#x1F697; Kocsi 1:</span><span class="pw-car-val">${wp.kocsi||'–'}</span><span class="pw-car-label">&#x1F46A; Sofőr:</span><span class="pw-car-val">${wp.sofor||'–'}</span><span class="pw-car-label">&#x1F697; Kocsi 2:</span><span class="pw-car-val">${wp.kocsi2||'–'}</span></div>${(wp._szallas||wp._autoidő||wp._indulas)?`<div class="pw-szallas-box">${wp._szallas?`<div class="pw-szallas-row"><span class="pw-car-label">🏠 Szállás:</span><span class="pw-car-val">${wp._szallas}</span></div>`:''}${wp._autoidő?`<div class="pw-szallas-row"><span class="pw-car-label">🚗 Autóidő:</span><span class="pw-car-val">${wp._autoidő}</span></div>`:''}${wp._indulas?(()=>{const d=wp._effDelta||0;const adj=d?minToHhmm(hhmmToMin(wp._indulas)+d):'';return`<div class="pw-szallas-row"><span class="pw-car-label">⏰ Indulás:</span><span class="pw-car-val pw-indulj">${adj?`<span style="text-decoration:line-through;opacity:.5;font-size:10px">${wp._indulas}</span> → <span style="color:${d>0?'#ff9977':'#88ffbb'}">${adj}</span>`:wp._indulas}</span></div>`;})():''}</div>`:''}</div>`;
+    html+=`<div class="pw-info-row"><div class="pw-car-grid"><span class="pw-car-label">&#x1F697; Kocsi 1:</span><span class="pw-car-val">${wp.kocsi||'–'}</span><span class="pw-car-label">&#x1F46A; Sofőr:</span><span class="pw-car-val">${wp.sofor||'–'}</span><span class="pw-car-label">&#x1F697; Kocsi 2:</span><span class="pw-car-val">${wp.kocsi2||'–'}</span></div>${(wp._szallas||wp._autoidő||wp._indulas)?`<div class="pw-szallas-box">${wp._szallas?`<div class="pw-szallas-row"><span class="pw-car-label">🏠 Szállás:</span><span class="pw-car-val">${wp._szallas}</span></div>`:''}${wp._autoidő?`<div class="pw-szallas-row"><span class="pw-car-label">🚗 Autóidő:</span><span class="pw-car-val">${wp._autoidő}</span></div>`:''}${wp._indulas?(()=>{const d=wp._effDelta||0;const adj=d?minToHhmm(hhmmToMin(wp._indulas)+d):'';const adjMins=d?hhmmToMin(wp._indulas)+d:null;const overnight=adjMins!==null&&adjMins>=1440;return`<div class="pw-szallas-row"><span class="pw-car-label">⏰ Indulás:</span><span class="pw-car-val pw-indulj">${adj?`<span style="text-decoration:line-through;opacity:.5;font-size:10px">${wp._indulas}</span> → <span style="color:${d>0?'#ff9977':'#88ffbb'}">${adj}${overnight?' <span style="font-size:9px;opacity:.7">(másnap)</span>':''}</span>`:wp._indulas}</span></div>`;})():''}</div>`:''}</div>`;
     if(wp._szallason&&wp._szallason.length){
       html+=`<div class="pw-szallason"><span style="color:#7777aa;font-size:10px">🛌 Szálláson:</span> ${wp._szallason.join(', ')}</div>`;
     }
@@ -1302,7 +1303,9 @@ Object.entries(C).forEach(([runner, color]) => {
 
 loadCheckinsCache();
 setActiveRunner(ACTIVE_RUNNER);
+applyCheckins();
 buildMap();
+_mapBuilt = true;
 updateActiveSegments();
 updateNowRunning();
 updateHeaderProgress();
