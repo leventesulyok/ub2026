@@ -681,7 +681,7 @@ function fmtDeltaLabel(d) {
 }
 function fmtHHMM(d) {
   if (!(d instanceof Date) || isNaN(d.getTime())) return '';
-  return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
+  return d.toLocaleTimeString('hu-HU', {hour:'2-digit', minute:'2-digit', timeZone:'Europe/Budapest'});
 }
 // Minuták szerinti signed delta két Date között (planned→actual).
 // Valódi Date objektumok → nincs wrap szükség, a nyers különbség pontos.
@@ -890,7 +890,7 @@ function buildStatsModal() {
   const runners = Object.keys(C);
   const rows = runners.map(runner => {
     const segs = S.filter(s => s.runner === runner);
-    const kmVal = segs.reduce((a,s) => a + (parseFloat(s.km) || segDistKm(s.coords)), 0);
+    const kmVal = segs.reduce((a,s) => a + parseFloat(segKm(s)), 0);
     const dplus = segs.reduce((a,s) => a+(s.dplus||0), 0);
     return {runner, km: kmVal.toFixed(1), dplus, segs: segs.length, color: C[runner]||'#aaa'};
   }).filter(r => r.segs > 0)
@@ -990,10 +990,10 @@ function updateHeaderProgress() {
   const fill = document.getElementById('headerProgFill');
   const txt  = document.getElementById('headerProgTxt');
   if (!fill || !txt) return;
-  const totalKm = S.reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
+  const totalKm = S.reduce((a,s)=>a+parseFloat(segKm(s)),0);
   const _nowMs = Date.now();
   const parseAbsTP = t => { const d = parseRaceTime(t); return d ? d.getTime() : null; };
-  const doneKm  = S.filter(s=>{ const t=parseAbsTP(s.time_to); return t!==null && t<=_nowMs; }).reduce((a,s)=>a+(parseFloat(s.km)||segDistKm(s.coords)),0);
+  const doneKm  = S.filter(s=>{ const t=parseAbsTP(s.time_to); return t!==null && t<=_nowMs; }).reduce((a,s)=>a+parseFloat(segKm(s)),0);
   const pct = totalKm>0 ? Math.min(100,(doneKm/totalKm*100)) : 0;
   fill.style.width = pct.toFixed(1)+'%';
   const lastSeg = [...S].reverse().find(s=>s.time_to);
