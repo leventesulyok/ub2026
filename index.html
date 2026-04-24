@@ -821,7 +821,6 @@ function updatePositionMarkers() {
   const STALE_MS = 2 * 60 * 1000; // 2 perc
   const now = Date.now();
   Object.entries(POSITIONS).forEach(([runner, pos]) => {
-    if (runner === ACTIVE_RUNNER) return; // saját pozíció = GPS kék dot
     if (!pos || isNaN(pos.lat) || isNaN(pos.lon)) return;
     const tsMs = pos.ts ? new Date(pos.ts).getTime() : 0;
     const stale = (now - tsMs) > STALE_MS;
@@ -845,7 +844,7 @@ function updatePositionMarkers() {
   });
   // Töröljük akiknél már nincs adat
   _posMarkers.forEach((m, runner) => {
-    if (!POSITIONS[runner] || runner === ACTIVE_RUNNER) {
+    if (!POSITIONS[runner]) {
       try { map.removeLayer(m); } catch(e) {}
       _posMarkers.delete(runner);
     }
