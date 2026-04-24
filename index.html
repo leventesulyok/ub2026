@@ -31,7 +31,6 @@ header p{font-size:10px;color:#9999cc}
 .pw-weather-temp{font-size:14px;font-weight:700;color:#aaddff}
 .pw-weather-desc{font-size:10px;color:#8899cc}
 .pw-relay-box{background:rgba(255,200,0,.07);border:1px solid rgba(255,200,0,.25);border-radius:7px;padding:7px 9px;margin:5px 0}
-.pw-relay-title{font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:#ccaa44;margin-bottom:4px;display:flex;justify-content:space-between;align-items:center}
 .pw-relay-time{font-size:12px;color:#ffd700;font-weight:700}
 .pw-relay-row{display:flex;align-items:center;gap:5px;margin:2px 0;font-size:11px}
 .pw-relay-label{font-size:9px;color:#998855;width:38px;flex-shrink:0}
@@ -269,15 +268,17 @@ const LS_KEY_RUNNER   = 'ub26_active_runner';
 let ACTIVE_RUNNER = localStorage.getItem(LS_KEY_RUNNER) || '';
 let _pendingCheckins = 0; // guard: fetchCheckins nem írja felül amíg POST fut
 
-function showToast(msg, type='error') {
+function showToast(msg, type='error', interactive=false) {
   const el = document.createElement('div');
   const bg = type === 'error' ? '#2a1010' : '#102a14';
   const col = type === 'error' ? '#ff9977' : '#88ffbb';
   const border = type === 'error' ? 'rgba(255,80,80,.4)' : 'rgba(80,200,100,.4)';
-  el.style.cssText = `position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:${bg};color:${col};border:1px solid ${border};padding:10px 16px;border-radius:8px;font-size:13px;z-index:29999;max-width:90vw;text-align:center;pointer-events:none;transition:opacity .4s`;
-  el.textContent = msg;
+  el.style.cssText = `position:fixed;bottom:76px;left:50%;transform:translateX(-50%);background:${bg};color:${col};border:1px solid ${border};padding:10px 16px;border-radius:8px;font-size:13px;z-index:29999;max-width:90vw;text-align:center;pointer-events:${interactive?'auto':'none'};transition:opacity .4s`;
+  el.innerHTML = msg;
   document.body.appendChild(el);
-  setTimeout(() => { el.style.opacity='0'; setTimeout(() => el.remove(), 400); }, 3600);
+  const hide = () => { el.style.opacity='0'; setTimeout(() => el.remove(), 400); };
+  if (interactive) el.addEventListener('click', hide);
+  setTimeout(hide, 4500);
 }
 
 const RG = {};
@@ -537,7 +538,7 @@ function toggleGPS() {
 }
 
 function startGPS() {
-  if (!navigator.geolocation) { alert('GPS nem elérhető ezen az eszközön.'); return; }
+  if (!navigator.geolocation) { showToast('GPS nem elérhető ezen az eszközön.'); return; }
   _gpsActive = true;
   _gpsWatchId = navigator.geolocation.watchPosition(pos => {
     const lat = pos.coords.latitude, lon = pos.coords.longitude;
@@ -818,20 +819,24 @@ function requestGPSSharing() {
 }
 
 function updatePositionMarkers() {
-  const STALE_MS = 2 * 60 * 1000; // 2 perc
+  const STALE_MS = 2 * 60 * 1000;  // 2 perc: elhalványul
+  const REMOVE_MS = 10 * 60 * 1000; // 10 perc: eltűnik
   const now = Date.now();
   Object.entries(POSITIONS).forEach(([runner, pos]) => {
     if (!pos || isNaN(pos.lat) || isNaN(pos.lon)) return;
     const tsMs = pos.ts ? new Date(pos.ts).getTime() : 0;
-    const stale = (now - tsMs) > STALE_MS;
+    const ageMs = now - tsMs;
+    if (tsMs && ageMs > REMOVE_MS) return; // régi adat, nem jelenítjük meg
+    const stale = ageMs > STALE_MS;
     const color = C[runner] || '#aaaaaa';
     const opacity = stale ? 0.35 : 1;
     const existing = _posMarkers.get(runner);
     const latlng = [pos.lat, pos.lon];
     const iconHtml = `<div style="opacity:${opacity};filter:drop-shadow(0 0 4px ${color})"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="22" height="22" fill="${color}"><circle cx="12" cy="5" r="3.5"/><path d="M12 10c-3.5 0-6 1.8-6 4v2h12v-2c0-2.2-2.5-4-6-4z"/></svg></div>`;
     const icon = L.divIcon({ html: iconHtml, iconSize:[22,22], iconAnchor:[11,11], className:'' });
-    const ageMin = tsMs ? Math.round((now - tsMs) / 60000) : null;
-    const tooltip = runner + (ageMin !== null ? ` · ${ageMin} perce` : '');
+    const ageMin = tsMs ? Math.round(ageMs / 60000) : null;
+    const ageLabel = ageMin === null ? '' : ageMin < 1 ? ' · most' : ` · ${ageMin} perce`;
+    const tooltip = runner + ageLabel;
     if (existing) {
       existing.setLatLng(latlng).setIcon(icon);
       existing.unbindTooltip();
@@ -911,10 +916,14 @@ async function checkinAt(wpName) {
   } finally { _pendingCheckins--; }
 }
 
-async function revokeCheckin(wpName) {
+function confirmRevokeCheckin(wpName) {
+  const wpEsc = wpName.replace(/'/g, "\\'");
+  showToast(`Törlöd: <b>${wpName}</b>? &nbsp;<span onclick="doRevokeCheckin('${wpEsc}')" style="cursor:pointer;text-decoration:underline;color:#ffaaaa">Igen, töröl</span>`, 'error', true);
+}
+
+async function doRevokeCheckin(wpName) {
   const prev = CHECKINS[wpName];
   if (!prev) return;
-  if (!confirm(`Biztosan törlöd a check-int: ${wpName}?`)) return;
   delete CHECKINS[wpName];
   saveCheckinsCache();
   applyCheckins();
@@ -1197,7 +1206,7 @@ function buildWpHtml(wp, i) {
     const wpEsc = wp.name.replace(/'/g, "\\'");
     let btn;
     if (wp._checkedIn) {
-      btn = `<button onclick="event.stopPropagation();revokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">Visszavon</button>`;
+      btn = `<button onclick="event.stopPropagation();confirmRevokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">Visszavon</button>`;
     } else {
       btn = `<button onclick="event.stopPropagation();checkinAt('${wpEsc}')" class="pw-checkin-btn pw-checkin-go">Beért</button>`;
     }
