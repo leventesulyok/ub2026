@@ -682,12 +682,12 @@ function fmtHHMM(d) {
   if (!(d instanceof Date) || isNaN(d.getTime())) return '';
   return String(d.getHours()).padStart(2,'0') + ':' + String(d.getMinutes()).padStart(2,'0');
 }
-// Minuták szerinti signed delta két Date között (planned→actual). Wrap ±12h.
+// Minuták szerinti signed delta két Date között (planned→actual).
+// Ha |d| > 720 (12h), valószínűleg versenynap előtti teszt check-in → 0.
 function deltaMinDates(pd, ad) {
   if (!pd || !ad) return 0;
-  let d = Math.round((ad.getTime() - pd.getTime()) / 60000);
-  if (d < -720) d += 1440;
-  if (d >  720) d -= 1440;
+  const d = Math.round((ad.getTime() - pd.getTime()) / 60000);
+  if (Math.abs(d) > 720) return 0;
   return d;
 }
 // Check-in rekord → Date (datetime vagy legacy time fallback-kel)
