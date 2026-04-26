@@ -414,11 +414,23 @@ function applyUB26(rows) {
     const arr = (r[13]||'').trim();
     M[from+'|||'+to] = { runner:(r[10]||'').trim(), arrival: arr ? arr.split(':').slice(0,2).join(':') : '' };
   }
+  function normN(s) {
+    return s.toLowerCase().trim()
+      .replace(/\bkelet\b/g,'').replace(/\bnyugat\b/g,'').replace(/\bk\b\.?/g,'').replace(/\bny\b\.?/g,'')
+      .replace(/versenyközpont/g,'').replace(/kampusz/g,'')
+      .replace(/\s+/g,' ').trim().replace(/\.$/,'');
+  }
+  const Mnorm = {};
+  Object.keys(M).forEach(k => {
+    const [a,b] = k.split('|||');
+    const nk = normN(a)+'|||'+normN(b);
+    if (!Mnorm[nk]) Mnorm[nk] = M[k];
+  });
   function find(f, t) {
     if (M[f+'|||'+t]) return M[f+'|||'+t];
-    const f6=f.trim().slice(0,8), t6=t.trim().slice(0,8);
-    const k=Object.keys(M).find(k=>{const[a,b]=k.split('|||');return a.slice(0,8)===f6&&b.slice(0,8)===t6;});
-    return k ? M[k] : null;
+    const nk = normN(f)+'|||'+normN(t);
+    if (Mnorm[nk]) return Mnorm[nk];
+    return null;
   }
   S.forEach(seg => {
     const d = find(seg.from, seg.to);
@@ -1148,7 +1160,6 @@ let _activeSegs = [];
 let _activePolylines = new Map();
 const _wpMarkers = new Map(); // index -> marker
 let _mapBuilt = false;
-let _lastRunnerSig = '';
 let _gpsActive = false, _gpsWatchId = null, _gpsMarker = null, _gpsCircle = null;
 const POSITIONS = {}; // { runner: { lat, lon, acc, ts } }
 const _posMarkers = new Map(); // runner -> L.marker
@@ -1320,11 +1331,16 @@ html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body">
 }
 
 function updateMapData() {
+  // Rebuild RG groups based on current seg.runner assignments (handles runner changes without full map rebuild)
+  Object.keys(RG).forEach(k => { RG[k] = []; });
   S.forEach((seg, i) => {
     const pl = _activePolylines.get(i);
     if (pl) {
-      pl.setStyle({ color: C[seg.runner] || '#aaa' });
+      const color = C[seg.runner] || '#aaa';
+      pl.setStyle({ color });
       pl.setPopupContent(buildSegPopup(seg));
+      if (!RG[seg.runner]) RG[seg.runner] = [];
+      RG[seg.runner].push(pl);
     }
   });
   // setIcon() bezárja a nyitott popupot (Leaflet-bug) – mentjük és újranyitjuk.
@@ -1418,15 +1434,12 @@ async function fetchAndRender() {
   try { await fetchWeather(); } catch(e) { console.warn('Weather (non-fatal):', e); }
   W.forEach(wp => { try { const w = getWeather(wp.lat, wp.arrival); if (w) wp.weather = w; } catch(e) {} });
   try {
-    const _runnerSig = S.map(s => s.runner).join(',');
-    const _runnersChanged = _mapBuilt && _runnerSig !== _lastRunnerSig;
-    if (!_mapBuilt || _runnersChanged) {
+    if (!_mapBuilt) {
       buildMap();
       _mapBuilt = true;
     } else {
       updateMapData();
     }
-    _lastRunnerSig = _runnerSig;
     updateNowRunning();
     updateHeaderProgress();
     updateHeaderDelta();
