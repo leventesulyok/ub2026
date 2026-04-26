@@ -414,23 +414,8 @@ function applyUB26(rows) {
     const arr = (r[13]||'').trim();
     M[from+'|||'+to] = { runner:(r[10]||'').trim(), arrival: arr ? arr.split(':').slice(0,2).join(':') : '' };
   }
-  function normN(s) {
-    return s.toLowerCase().trim()
-      .replace(/\bkelet\b/g,'').replace(/\bnyugat\b/g,'').replace(/\bk\b\.?/g,'').replace(/\bny\b\.?/g,'')
-      .replace(/versenyközpont/g,'').replace(/kampusz/g,'')
-      .replace(/\s+/g,' ').trim().replace(/\.$/,'');
-  }
-  const Mnorm = {};
-  Object.keys(M).forEach(k => {
-    const [a,b] = k.split('|||');
-    const nk = normN(a)+'|||'+normN(b);
-    if (!Mnorm[nk]) Mnorm[nk] = M[k];
-  });
   function find(f, t) {
-    if (M[f+'|||'+t]) return M[f+'|||'+t];
-    const nk = normN(f)+'|||'+normN(t);
-    if (Mnorm[nk]) return Mnorm[nk];
-    return null;
+    return M[f + '|||' + t] || null;
   }
   S.forEach(seg => {
     const d = find(seg.from, seg.to);
