@@ -1,0 +1,19 @@
+{
+  "name": "NN Ultrabalaton 2026 – Csapattérkép",
+  "short_name": "UB2026",
+  "description": "7 fős csapattérkép az NN Ultrabalaton 2026 versenyhez",
+  "start_url": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#12122a",
+  "theme_color": "#1a1a35",
+  "lang": "hu",
+  "icons": [
+    {
+      "src": "./icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
