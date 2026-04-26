@@ -289,8 +289,8 @@ function showToast(msg, type='error', interactive=false, onClickAction=null) {
   el.innerHTML = msg;
   document.body.appendChild(el);
   const hide = () => { el.style.opacity='0'; setTimeout(() => el.remove(), 400); };
-  if (onClickAction) {
-    el.addEventListener('click', () => { eval(onClickAction); hide(); });
+  if (typeof onClickAction === 'function') {
+    el.addEventListener('click', () => { onClickAction(); hide(); });
   } else if (interactive) {
     el.addEventListener('click', hide);
   }
@@ -454,30 +454,9 @@ function applyValtas(rows) {
     V[n].push(rows[i]);
   }
 
-  function normName(s) {
-    return s.toLowerCase().trim()
-      .replace(/kelet/g,'').replace(/nyugat/g,'').replace(/\bk\b\.?/g,'').replace(/\bny\b\.?/g,'')
-      .replace(/versenyközpont/g,'').replace(/kampusz/g,'')
-      .replace(/\s+/g,' ').trim().replace(/\.$/,'');
-  }
-
-  // Build reverse: normName → array of CSV keys
-  const Vnorm = {};
-  Object.keys(V).forEach(k => {
-    const nn = normName(k);
-    if (!Vnorm[nn]) Vnorm[nn] = [];
-    Vnorm[nn].push(k);
-  });
-
   function getRows(wpName, isFinish) {
-    // Exact name match first
-    if (V[wpName]) return isFinish ? [V[wpName][V[wpName].length-1]] : [V[wpName][0]];
-    // Normalized match - only returns rows for first/last as needed
-    const nn = normName(wpName);
-    const keys = Vnorm[nn] || [];
-    if (!keys.length) return null;
-    const allRows = keys.flatMap(k => V[k]);
-    return [isFinish ? allRows[allRows.length-1] : allRows[0]];
+    if (!V[wpName]) return null;
+    return isFinish ? [V[wpName][V[wpName].length - 1]] : [V[wpName][0]];
   }
 
   // Step 1: Reset all non-finish special waypoints
@@ -958,6 +937,9 @@ function applyCheckins() {
   });
 }
 
+function checkinByIdx(i) { if (W[i]) checkinAt(W[i].name); }
+function confirmRevokeByIdx(i) { if (W[i]) confirmRevokeCheckin(W[i].name); }
+
 async function checkinAt(wpName) {
   if (!ACTIVE_RUNNER) { showToast('Előbb válaszd ki a neved a fejlécben!', 'error'); return; }
   const now = new Date();
@@ -978,8 +960,7 @@ async function checkinAt(wpName) {
 }
 
 function confirmRevokeCheckin(wpName) {
-  const wpEsc = wpName.replace(/'/g, "\\'");
-  showToast(`Kattints ide a törlés megerősítéséhez`, 'error', true, `doRevokeCheckin('${wpEsc}')`);
+  showToast(`Kattints ide a törlés megerősítéséhez`, 'error', true, () => doRevokeCheckin(wpName));
 }
 
 async function doRevokeCheckin(wpName) {
@@ -1263,12 +1244,11 @@ function buildWpHtml(wp, i) {
   }
   let rightBlock = arrBadge;
   if (i > 0) {
-    const wpEsc = wp.name.replace(/'/g, "\\'");
     let btn;
     if (wp._checkedIn) {
-      btn = `<button onclick="event.stopPropagation();confirmRevokeCheckin('${wpEsc}')" class="pw-checkin-btn pw-checkin-revoke">Visszavon</button>`;
+      btn = `<button onclick="event.stopPropagation();confirmRevokeByIdx(${i})" class="pw-checkin-btn pw-checkin-revoke">Visszavon</button>`;
     } else {
-      btn = `<button onclick="event.stopPropagation();checkinAt('${wpEsc}')" class="pw-checkin-btn pw-checkin-go">Beért</button>`;
+      btn = `<button onclick="event.stopPropagation();checkinByIdx(${i})" class="pw-checkin-btn pw-checkin-go">Beért</button>`;
     }
     rightBlock = `<span style="display:flex;align-items:center;gap:6px;min-width:0;flex-shrink:1">${btn}${arrBadge}</span>`;
   }
