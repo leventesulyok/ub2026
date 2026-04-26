@@ -278,7 +278,9 @@ let ACTIVE_RUNNER = localStorage.getItem(LS_KEY_RUNNER) || '';
 let _pendingCheckins = 0; // guard: fetchCheckins nem írja felül amíg POST fut
 
 function showToast(msg, type='error', interactive=false, onClickAction=null) {
+  document.querySelectorAll('._toast-el').forEach(t => t.remove());
   const el = document.createElement('div');
+  el.className = '_toast-el';
   const bg = type === 'error' ? '#2a1010' : '#102a14';
   const col = type === 'error' ? '#ff9977' : '#88ffbb';
   const border = type === 'error' ? 'rgba(255,80,80,.4)' : 'rgba(80,200,100,.4)';
@@ -858,7 +860,7 @@ function startGPSSharing() {
   }, err => {
     console.warn('GPS share hiba:', err.message);
     if (err.code === 1) showToast('GPS megosztás: engedély megtagadva – helyzeted nem látható mások számára.');
-  }, { enableHighAccuracy: false, maximumAge: 15000, timeout: 20000 });
+  }, { enableHighAccuracy: true, maximumAge: 15000, timeout: 20000 });
 }
 
 function stopGPSSharing() {
@@ -1356,6 +1358,7 @@ function buildSegPopup(seg) {
 
 function buildMap() {
   clearDynLayers();
+  document.querySelectorAll('#ctrl .btn').forEach(b => b.classList.remove('off'));
 S.forEach((seg,_si)=>{
   const color=C[seg.runner];
   const isNight=seg.phase==='night';

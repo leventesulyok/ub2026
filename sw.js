@@ -1,4 +1,4 @@
-const CACHE = 'ub2026-v1';
+const CACHE = 'ub2026-v2';
 
 self.addEventListener('install', () => self.skipWaiting());
 
@@ -36,11 +36,15 @@ self.addEventListener('fetch', e => {
     );
     return;
   }
-  // Minden más (Leaflet CDN stb): cache-first, háttérben frissít
+  // Dinamikus API hívások (polling) ne kerüljenek cache-be
+  const url = new URL(e.request.url);
+  if (url.searchParams.has('_t') || e.request.method !== 'GET') return;
+
+  // Statikus eszközök (Leaflet CDN, manifest, ikonok): cache-first, háttérben frissít
   e.respondWith(
     caches.match(e.request).then(cached => {
       const net = fetch(e.request).then(r => {
-        caches.open(CACHE).then(c => c.put(e.request, r.clone()));
+        if (r.ok) caches.open(CACHE).then(c => c.put(e.request, r.clone()));
         return r;
       });
       return cached || net;
