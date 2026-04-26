@@ -894,7 +894,7 @@ function updatePositionMarkers() {
       existing.unbindTooltip();
       existing.bindTooltip(tooltip, { direction:'top', offset:[0,-7], opacity:0.95 });
     } else {
-      const m = L.marker(latlng, { icon, zIndexOffset: 900 }).addTo(map);
+      const m = L.marker(latlng, { icon, zIndexOffset: -200 }).addTo(map);
       m.bindTooltip(tooltip, { direction:'top', offset:[0,-7], opacity:0.95 });
       _posMarkers.set(runner, m);
     }
@@ -1309,7 +1309,10 @@ html+=`<div class="pw-seg" style="border-color:${col}"><div class="pw-seg-body">
 function updateMapData() {
   S.forEach((seg, i) => {
     const pl = _activePolylines.get(i);
-    if (pl) pl.setPopupContent(buildSegPopup(seg));
+    if (pl) {
+      pl.setStyle({ color: C[seg.runner] || '#aaa' });
+      pl.setPopupContent(buildSegPopup(seg));
+    }
   });
   // setIcon() bezárja a nyitott popupot (Leaflet-bug) – mentjük és újranyitjuk.
   W.forEach((wp, i) => {
@@ -1371,8 +1374,8 @@ async function fetchAndRender() {
   let t1, t2;
   try {
     [t1, t2] = await Promise.all([
-      fetch(CSV_UB26   + '&_t=' + Date.now()).then(r => { if(!r.ok) throw new Error('UB26 HTTP '+r.status); return r.text(); }),
-      fetch(CSV_VALTAS + '&_t=' + Date.now()).then(r => { if(!r.ok) throw new Error('Váltás HTTP '+r.status); return r.text(); })
+      fetch(CSV_UB26   + '&_t=' + Date.now(), {cache:'no-store'}).then(r => { if(!r.ok) throw new Error('UB26 HTTP '+r.status); return r.text(); }),
+      fetch(CSV_VALTAS + '&_t=' + Date.now(), {cache:'no-store'}).then(r => { if(!r.ok) throw new Error('Váltás HTTP '+r.status); return r.text(); })
     ]);
     saveToCache(t1, t2);
   } catch(fe) {
